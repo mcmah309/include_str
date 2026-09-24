@@ -1,0 +1,5 @@
+{
+    "message": "two  spaces",
+    "enabled": true,
+    "values": [1, null]
+}

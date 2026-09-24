@@ -113,10 +113,18 @@ fn public_macros_reject_missing_files_and_invalid_utf8() {
         "include_str_trim",
         "include_str_trim_lines",
         "include_sql_str",
+        "include_str_json",
+        "include_str_replace",
+        "include_str_strip_prefix",
     ] {
         for (file, diagnostic) in [("missing.txt", "couldn't read"), ("invalid.txt", "utf-8")] {
+            let extra = match name {
+                "include_str_replace" => ", \"a\", \"b\"",
+                "include_str_strip_prefix" => ", \"a\"",
+                _ => "",
+            };
             let output = consumer.compile(&format!(
-                "pub const VALUE: &str = strings::{name}!(\"{file}\");"
+                "pub const VALUE: &str = strings::{name}!(\"{file}\"{extra});"
             ));
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(!output.status.success(), "{name} accepted {file}");
@@ -134,6 +142,7 @@ fn renamed_no_std_consumer_uses_static_results_and_tracks_files() {
     fs::create_dir(consumer.0.join("nested")).unwrap();
     consumer.write("nested/query.sql", "-- start\nSELECT /* x */ 'a  -- b';\n");
     consumer.write("nested/text.txt", "\u{3000}é 🦀\n  日本語\u{a0}");
+    consumer.write("nested/config.json", " { \"a\" : [true, null, 1e99] } ");
     consumer.write(
         "nested/mod.rs",
         r#"
@@ -141,6 +150,9 @@ fn renamed_no_std_consumer_uses_static_results_and_tracks_files() {
         pub static TEXT: &str = strings::include_str_trim!(concat!("text", ".txt"),);
         pub const RAW: &str = strings::include_str!("text.txt");
         pub const LINES: &str = strings::include_str_trim_lines!(concat!("text", ".txt"),);
+        pub const REPLACED: &str = strings::include_str_replace!("text.txt", "🦀", "Rust");
+        pub const STRIPPED: &str = strings::include_str_strip_prefix!("text.txt", "  ");
+        pub const JSON: &str = strings::include_str_json!("config.json");
     "#,
     );
     let output = consumer.compile(
@@ -160,6 +172,9 @@ fn renamed_no_std_consumer_uses_static_results_and_tracks_files() {
         const _: () = assert!(equal(nested::QUERY, "SELECT 'a  -- b';"));
         const _: () = assert!(equal(nested::TEXT, "é 🦀\n  日本語"));
         const _: () = assert!(equal(nested::LINES, "é 🦀\n日本語"));
+        const _: () = assert!(equal(nested::REPLACED, "\u{3000}é Rust\n  日本語\u{a0}"));
+        const _: () = assert!(equal(nested::STRIPPED, "\u{3000}é 🦀\n日本語\u{a0}"));
+        const _: () = assert!(equal(nested::JSON, "{\"a\":[true,null,1e99]}"));
         const _: () = assert!(equal(nested::RAW, "\u{3000}é 🦀\n  日本語\u{a0}"));
         pub fn query() -> &'static str { nested::QUERY }
     "#,
@@ -174,4 +189,66 @@ fn renamed_no_std_consumer_uses_static_results_and_tracks_files() {
         .replace('\\', "/");
     assert!(dependencies.contains("nested/query.sql"), "{dependencies}");
     assert!(dependencies.contains("nested/text.txt"), "{dependencies}");
+    assert!(
+        dependencies.contains("nested/config.json"),
+        "{dependencies}"
+    );
+}
+
+#[test]
+fn json_and_invalid_prefixes_fail_at_compile_time() {
+    let consumer = Consumer::new();
+    for input in [
+        "",
+        " ",
+        "[1,]",
+        "{\"x\":}",
+        "01",
+        "1 2",
+        "true false",
+        "NaN",
+        "/*x*/{}",
+        "\"\\uZZZZ\"",
+        "\"a\nb\"",
+        "\u{feff}{}",
+        "\u{a0}null",
+    ] {
+        consumer.write("input.json", input);
+        let output = consumer.compile(
+            "pub fn json() -> &'static str { strings::include_str_json!(\"input.json\") }",
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "accepted {input:?}");
+        assert!(
+            stderr.contains("E0080") && stderr.contains("include_str_json!:"),
+            "{stderr}"
+        );
+    }
+    consumer.write(
+        "input.json",
+        format!("{}0{}", "[".repeat(129), "]".repeat(129)),
+    );
+    let output =
+        consumer.compile("pub const JSON: &str = strings::include_str_json!(\"input.json\");");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("nesting exceeds 128"));
+    // The documented maximum must also succeed in actual constant evaluation.
+    consumer.write(
+        "input.json",
+        format!("{}0{}", "[".repeat(128), "]".repeat(128)),
+    );
+    let output =
+        consumer.compile("pub const JSON: &str = strings::include_str_json!(\"input.json\");");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = consumer.compile(
+        "pub const TEXT: &str = strings::include_str_strip_prefix!(\"input.json\", \"\\n\");",
+    );
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("prefix must not contain a line ending")
+    );
 }

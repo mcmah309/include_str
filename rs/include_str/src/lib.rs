@@ -97,6 +97,93 @@ macro_rules! include_sql_str {
     }};
 }
 
+/// Include a UTF-8 file and replace every non-overlapping literal occurrence.
+///
+/// Matches are processed left to right, like `str::replace`. Replacement text
+/// is not searched again. An empty search string inserts the replacement at
+/// every Unicode character boundary, including the start and end.
+/// Search and replacement arguments must be constant string expressions.
+///
+/// ```
+/// const TEXT: &str = include_str::include_str_replace!(
+///     "../tests/fixtures/message.txt", "world", "Rust",
+/// );
+/// assert_eq!(TEXT, " \tHello, Rust!\r\n");
+/// ```
+#[macro_export]
+macro_rules! include_str_replace {
+    ($path:expr, $from:expr, $to:expr $(,)?) => {
+        const {
+            $crate::__private::as_str(
+                &const {
+                    $crate::__private::replace::<
+                        { $crate::__private::replace_len($crate::include_str!($path), $from, $to) },
+                    >($crate::include_str!($path), $from, $to)
+                },
+            )
+        }
+    };
+}
+
+/// Include a UTF-8 file and remove one literal prefix from each matching line.
+///
+/// Lines without the prefix are unchanged. Matching starts at the first byte of
+/// each line without trimming indentation. LF and CRLF endings are preserved;
+/// a lone CR does not start a new line. An empty prefix has no effect.
+/// The prefix must be a constant string expression and cannot contain CR or LF.
+///
+/// ```
+/// const TEXT: &str = include_str::include_str_strip_prefix!(
+///     "../tests/fixtures/message.txt", " \t",
+/// );
+/// assert_eq!(TEXT, "Hello, world!\r\n");
+/// ```
+#[macro_export]
+macro_rules! include_str_strip_prefix {
+    ($path:expr, $prefix:expr $(,)?) => {
+        const {
+            $crate::__private::as_str(
+                &const {
+                    $crate::__private::strip_prefix::<
+                        {
+                            $crate::__private::strip_prefix_len(
+                                $crate::include_str!($path),
+                                $prefix,
+                            )
+                        },
+                    >($crate::include_str!($path), $prefix)
+                },
+            )
+        }
+    };
+}
+
+/// Include a UTF-8 JSON file, validate its syntax, and remove formatting whitespace.
+///
+/// Preserves strings, escape spellings, numbers, key order, and duplicate keys
+/// byte for byte. Accepts any JSON root value. Only space, tab, CR, and LF outside
+/// strings are removed. Comments, trailing commas, BOMs, and malformed input
+/// produce compile-time errors. Nesting is limited to 128 arrays/objects.
+///
+/// Follows the [RFC 8259 grammar](https://www.rfc-editor.org/rfc/rfc8259):
+/// Unicode escapes are checked syntactically but not decoded, so unpaired
+/// surrogate escapes are preserved. Numbers are not restricted to float ranges.
+///
+/// ```
+/// const JSON: &str = include_str::include_str_json!("../tests/fixtures/config.json");
+/// assert_eq!(JSON, r#"{"message":"two  spaces","enabled":true,"values":[1,null]}"#);
+/// ```
+#[macro_export]
+macro_rules! include_str_json {
+    ($path:expr $(,)?) => {{
+        const INPUT: &str = $crate::include_str!($path);
+        const LEN: usize = $crate::__private::json_len(INPUT);
+        const BYTES: [u8; LEN] = $crate::__private::json::<LEN>(INPUT);
+        const TEXT: &str = $crate::__private::as_str(&BYTES);
+        TEXT
+    }};
+}
+
 // Public only so exported macros can use these functions in downstream crates.
 #[doc(hidden)]
 pub mod __private;

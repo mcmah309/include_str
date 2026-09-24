@@ -3,6 +3,14 @@
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod operations_tests;
+
+mod json;
+mod transforms;
+pub use json::{json, json_len};
+pub use transforms::{replace, replace_len, strip_prefix, strip_prefix_len};
+
 pub const fn as_str(bytes: &[u8]) -> &str {
     match core::str::from_utf8(bytes) {
         Ok(text) => text,
