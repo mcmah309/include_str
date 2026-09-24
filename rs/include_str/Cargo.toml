@@ -5,12 +5,8 @@ version = "0.0.1"
 edition = "2024"
 rust-version = "1.85"
 readme = "README.md"
-# repository = ""
-# license = "" # e.g. `Apache-2.0`
-# categories = []
-# keywords = []
-# documentation = "" # Alternative documentation
-# rust-version = "" # Min required rust version
+repository = "https://github.com/mcmah309/include_str"
+license = "Apache-2.0"
 
 [dependencies]
 
