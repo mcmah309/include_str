@@ -31,6 +31,10 @@ network connection, test dependencies, or external JSON interpreter is required.
 
 ## Text and SQL
 
+- Line tables compared with `str::lines()` over every Unicode scalar and all
+  short mixed-text inputs, including LF/CRLF boundaries, blank lines, lone CRs,
+  borrowed entries, lookup operations, and thousands of entries.
+
 - All strings up to five characters over a seven-character alphabet containing
   ASCII, multibyte Unicode, spaces, tabs, CR, and LF. Replacement, trimming, and
   prefix stripping are compared with standard-library operations.

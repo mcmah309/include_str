@@ -21,6 +21,46 @@ pub const fn as_str(bytes: &[u8]) -> &str {
     }
 }
 
+pub const fn lines_len(input: &str) -> usize {
+    let bytes = input.as_bytes();
+    let mut count = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\n' {
+            count += 1;
+        }
+        i += 1;
+    }
+    if !bytes.is_empty() && bytes[bytes.len() - 1] != b'\n' {
+        count += 1;
+    }
+    count
+}
+
+pub const fn lines<const N: usize>(input: &str) -> [&str; N] {
+    let bytes = input.as_bytes();
+    let mut output = [""; N];
+    let mut start = 0;
+    let mut count = 0;
+    while start < bytes.len() {
+        let mut end = start;
+        while end < bytes.len() && bytes[end] != b'\n' {
+            end += 1;
+        }
+        let mut content_end = end;
+        if end < bytes.len() && end > start && bytes[end - 1] == b'\r' {
+            content_end -= 1;
+        }
+        // LF/CR are ASCII, so these offsets are always UTF-8 boundaries.
+        let content = bytes.split_at(start).1.split_at(content_end - start).0;
+        output[count] = as_str(content);
+        count += 1;
+        start = if end < bytes.len() { end + 1 } else { end };
+    }
+    assert!(count == N);
+    output
+}
+
 // The input originates from &str. Decode one scalar at a character boundary.
 const fn whitespace_len(bytes: &[u8], i: usize) -> usize {
     let first = bytes[i];

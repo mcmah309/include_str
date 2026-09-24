@@ -110,6 +110,7 @@ fn public_macros_reject_missing_files_and_invalid_utf8() {
     consumer.write("invalid.txt", [0xff, 0xfe, b'a']);
     for name in [
         "include_str",
+        "include_lines",
         "include_str_trim",
         "include_str_trim_lines",
         "include_sql_str",
@@ -125,7 +126,12 @@ fn public_macros_reject_missing_files_and_invalid_utf8() {
                 _ => "",
             };
             let output = consumer.compile(&format!(
-                "pub const VALUE: &str = strings::{name}!(\"{file}\"{extra});"
+                "pub const VALUE: &{} = strings::{name}!(\"{file}\"{extra});",
+                if name == "include_lines" {
+                    "[&str]"
+                } else {
+                    "str"
+                }
             ));
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(!output.status.success(), "{name} accepted {file}");
@@ -355,6 +361,7 @@ fn every_macro_rejects_invalid_arguments_without_runtime_fallback() {
     consumer.write("input.txt", "null");
     for name in [
         "include_str",
+        "include_lines",
         "include_str_trim",
         "include_str_trim_lines",
         "include_sql_str",
@@ -579,4 +586,32 @@ fn empty_and_whitespace_files_have_explicit_results_for_every_macro() {
             assert!(String::from_utf8_lossy(&output.stderr).contains("E0080"));
         }
     }
+}
+
+#[test]
+fn line_tables_work_in_renamed_no_std_consumers_and_track_the_source_file() {
+    let consumer = Consumer::new();
+    fs::create_dir(consumer.0.join("nested")).unwrap();
+    consumer.write("nested/words 🦀.txt", "apple\r\n\nbanana\napple");
+    consumer.write("nested/mod.rs", r#"
+        pub const INPUT: &str = "caller";
+        pub const LEN: usize = 99;
+        pub const LINES: &[&str] = &["caller"];
+        pub const RESULT: &str = "caller";
+        pub const TABLE: &[&str] = strings::include_lines!(concat!("words ", "🦀.txt"),);
+        pub static STATIC_TABLE: &[&str] = strings::include_lines!("words 🦀.txt");
+        pub fn table() -> &'static [&'static str] { strings::include_lines!("words 🦀.txt") }
+        const _: () = assert!(TABLE.len() == 4 && STATIC_TABLE.len() == 4);
+        const _: () = assert!(TABLE[0].len() == 5 && TABLE[1].is_empty() && TABLE[2].len() == 6);
+        const _: () = assert!(INPUT.len() == 6 && LEN == 99 && LINES.len() == 1 && RESULT.len() == 6);
+    "#);
+    let output = consumer.compile("#![no_std]\nmod nested;\npub use nested::table;");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let dependencies = fs::read_to_string(consumer.0.join("consumer.d")).unwrap();
+    assert!(dependencies.contains("words"), "{dependencies}");
+    assert!(dependencies.contains("🦀.txt"), "{dependencies}");
 }

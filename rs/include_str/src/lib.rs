@@ -1,6 +1,7 @@
 //! Include UTF-8 files, optionally preprocessing them at compile time.
 //!
-//! All macros return a `&'static str`. Paths are relative to the Rust source file
+//! Text macros return a `&'static str`; [`include_lines!`] returns a
+//! `&'static [&'static str]`. Paths are relative to the Rust source file
 //! containing the invocation, exactly as with Rust's built-in `include_str!`.
 //! Files are tracked by the compiler and changes trigger recompilation.
 //!
@@ -17,6 +18,35 @@
 
 /// Rust's built-in macro, re-exported without changing its behavior.
 pub use core::include_str;
+
+/// Include a UTF-8 file as a static slice of lines for lookup tables or word lists.
+///
+/// Matches [`str::lines`]: LF and CRLF delimiters are removed, blank lines are
+/// preserved, and a final line ending does not add an extra empty entry. An
+/// empty file produces an empty slice. Lone CRs, other Unicode whitespace,
+/// indentation, duplicates, and line order are preserved. No sorting or trimming
+/// is performed. Both the slice and its strings have static lifetimes.
+///
+/// Accepts the same path expressions as [`include_str!`]. Splitting happens at
+/// compile time; the entries borrow from the included file without allocation.
+///
+/// ```
+/// const WORDS: &[&str] = include_str::include_lines!("../tests/fixtures/words.txt");
+/// assert_eq!(WORDS, &["apple", "banana", "cherry"]);
+/// assert!(WORDS.contains(&"banana"));
+/// // This fixture is already sorted, so binary search is also available.
+/// assert_eq!(WORDS.binary_search(&"cherry"), Ok(2));
+/// ```
+#[macro_export]
+macro_rules! include_lines {
+    ($path:expr $(,)?) => {{
+        const INPUT: &str = $crate::include_str!($path);
+        const LEN: usize = $crate::__private::lines_len(INPUT);
+        const LINES: [&str; LEN] = $crate::__private::lines::<LEN>(INPUT);
+        const RESULT: &[&str] = &LINES;
+        RESULT
+    }};
+}
 
 /// Include a UTF-8 file and remove leading and trailing Unicode whitespace.
 ///
