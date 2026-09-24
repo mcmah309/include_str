@@ -1,5 +1,8 @@
 //! Implementation details for the exported macros; not a supported public API.
 
+#[cfg(test)]
+mod tests;
+
 pub const fn as_str(bytes: &[u8]) -> &str {
     match core::str::from_utf8(bytes) {
         Ok(text) => text,
