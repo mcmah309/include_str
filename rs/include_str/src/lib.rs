@@ -130,8 +130,10 @@ macro_rules! include_sql_str {
 /// Include a UTF-8 file and replace every non-overlapping literal occurrence.
 ///
 /// Matches are processed left to right, like `str::replace`. Replacement text
-/// is not searched again. An empty search string inserts the replacement at
+/// is not searched again within the same pair. An empty search string inserts the replacement at
 /// every Unicode character boundary, including the start and end.
+/// Pass one or more search/replacement pairs after the path. Pairs are applied
+/// in order, so later pairs also match text inserted by earlier pairs.
 /// Search and replacement arguments must be constant string expressions.
 ///
 /// ```
@@ -139,19 +141,31 @@ macro_rules! include_sql_str {
 ///     "../tests/fixtures/message.txt", "world", "Rust",
 /// );
 /// assert_eq!(TEXT, " \tHello, Rust!\r\n");
+///
+/// const CUSTOM: &str = include_str::include_str_replace!(
+///     "../tests/fixtures/message.txt",
+///     "world", "Rust",
+///     "Hello", "Hi",
+/// );
+/// assert_eq!(CUSTOM, " \tHi, Rust!\r\n");
 /// ```
 #[macro_export]
 macro_rules! include_str_replace {
-    ($path:expr, $from:expr, $to:expr $(,)?) => {
-        const {
+    (@apply $input:expr;) => { $input };
+    (@apply $input:expr; $from:expr, $to:expr $(, $next_from:expr, $next_to:expr)*) => {
+        $crate::include_str_replace!(@apply const {
+            const INPUT: &str = $input;
             $crate::__private::as_str(
                 &const {
                     $crate::__private::replace::<
-                        { $crate::__private::replace_len($crate::include_str!($path), $from, $to) },
-                    >($crate::include_str!($path), $from, $to)
+                        { $crate::__private::replace_len(INPUT, $from, $to) },
+                    >(INPUT, $from, $to)
                 },
             )
-        }
+        }; $($next_from, $next_to),*)
+    };
+    ($path:expr, $($from:expr, $to:expr),+ $(,)?) => {
+        $crate::include_str_replace!(@apply $crate::include_str!($path); $($from, $to),+)
     };
 }
 

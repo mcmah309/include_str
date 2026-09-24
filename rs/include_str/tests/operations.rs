@@ -41,6 +41,42 @@ fn replacements_work_in_constants_and_statics() {
 }
 
 #[test]
+fn multiple_replacements_run_in_order_at_compile_time() {
+    const FROM: &str = "world";
+    const TEXT: &str = include_str_replace!(
+        "fixtures/message.txt",
+        FROM,
+        concat!("Rust", "🦀"),
+        "Hello",
+        "Hi",
+        "Rust🦀",
+        "friends",
+    );
+    assert_eq!(TEXT, " \tHi, friends!\r\n");
+    static EMPTY: &str = include_str_replace!("fixtures/empty.txt", "", "é", "é", "🦀");
+    assert_eq!(EMPTY, "🦀");
+    assert_eq!(
+        include_str_replace!(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/unicode.txt"),
+            "",
+            "-",
+            "-",
+            "é",
+            "é",
+            ""
+        ),
+        include_str::include_str!("fixtures/unicode.txt")
+            .replace("", "-")
+            .replace("-", "é")
+            .replace("é", "")
+    );
+    assert_eq!(
+        include_str_replace!("fixtures/message.txt", "world", "worldworld", "absent", "x"),
+        " \tHello, worldworld!\r\n"
+    );
+}
+
+#[test]
 fn prefix_removal_and_json_work_through_public_macros() {
     const PREFIX: &str = "  ";
     const TEXT: &str = include_str_strip_prefix!("fixtures/unicode.txt", PREFIX,);
