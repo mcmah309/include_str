@@ -17,6 +17,7 @@ const QUERY: &str = include_str::include_sql_str!("query.sql");
 const CUSTOM: &str = include_str::include_str_replace!("message.txt", "{{name}}", "Rust");
 const UNQUOTED: &str = include_str::include_str_strip_prefix!("message.txt", "> ");
 const JSON: &str = include_str::include_str_json!("config.json");
+const JSON_FROM_JSONC: &str = include_str::include_str_jsonc!("config.jsonc");
 ```
 
 - `include_str!` is a direct re-export of Rust's built-in macro.
@@ -26,6 +27,13 @@ const JSON: &str = include_str::include_str_json!("config.json");
 - `include_str_replace!` replaces all non-overlapping literal matches, like `str::replace`. An empty search string inserts the replacement at every Unicode character boundary. Arguments must be constant string expressions.
 - `include_str_strip_prefix!` removes one matching literal prefix from each line, preserving other content and LF/CRLF endings. It does not trim indentation. An empty prefix has no effect; prefixes containing CR or LF are rejected.
 - `include_str_json!` validates and minifies JSON at compile time, preserving strings, escapes, numeric spellings, duplicate keys, and key order. It rejects comments, trailing commas, and BOMs, and supports up to 128 nested arrays/objects. Unicode escapes are validated syntactically, without decoding surrogate pairs.
+
+`include_str_jsonc!` converts JSON with `//` line comments, non-nested `/* ... */`
+block comments, and optional trailing commas into minified JSON. Strings and
+numeric spellings are preserved. It uses the same validation and 128-container
+nesting limit as `include_str_json!`; single quotes, unquoted keys, hexadecimal
+numbers, and comments splitting numbers or keywords are rejected. The existing
+`include_str_json!` remains strict JSON.
 
 For example, this SQL:
 

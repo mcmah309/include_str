@@ -7,15 +7,65 @@ struct Parser<'a, const N: usize> {
     output: [u8; N],
     written: usize,
     emit: bool,
+    jsonc: bool,
 }
 
 impl<const N: usize> Parser<'_, N> {
     const fn whitespace(&mut self) {
-        while self.at < self.input.len()
-            && matches!(self.input[self.at], b' ' | b'\t' | b'\r' | b'\n')
-        {
-            self.at += 1;
+        loop {
+            while self.at < self.input.len()
+                && matches!(self.input[self.at], b' ' | b'\t' | b'\r' | b'\n')
+            {
+                self.at += 1;
+            }
+            if !self.jsonc || self.at + 1 >= self.input.len() || self.input[self.at] != b'/' {
+                return;
+            }
+            match self.input[self.at + 1] {
+                b'/' => {
+                    self.at += 2;
+                    while self.at < self.input.len()
+                        && !matches!(self.input[self.at], b'\r' | b'\n')
+                    {
+                        self.at += 1;
+                    }
+                }
+                b'*' => {
+                    self.at += 2;
+                    while self.at + 1 < self.input.len()
+                        && !(self.input[self.at] == b'*' && self.input[self.at + 1] == b'/')
+                    {
+                        self.at += 1;
+                    }
+                    assert!(
+                        self.at + 1 < self.input.len(),
+                        "include_str_jsonc!: unterminated block comment"
+                    );
+                    self.at += 2;
+                }
+                _ => return,
+            }
         }
+    }
+
+    // Delay emitting the comma until we know it is not a JSONC trailing comma.
+    const fn comma(&mut self, close: u8) -> bool {
+        assert!(
+            self.peek() == b',',
+            "include_str_json!: expected comma or closing delimiter"
+        );
+        self.at += 1;
+        if self.jsonc {
+            self.whitespace();
+            if self.peek() == close {
+                return true;
+            }
+        }
+        if self.emit {
+            self.output[self.written] = b',';
+        }
+        self.written += 1;
+        false
     }
 
     const fn peek(&self) -> u8 {
@@ -140,13 +190,14 @@ impl<const N: usize> Parser<'_, N> {
 
 // Explicit grammar stack avoids recursion in both const evaluation and tests.
 // States: root value/end, array first/value/end, object first/key/colon/value/end.
-pub(super) const fn scan_json<const N: usize>(input: &str, emit: bool) -> ([u8; N], usize) {
+const fn scan<const N: usize>(input: &str, emit: bool, jsonc: bool) -> ([u8; N], usize) {
     let mut parser = Parser {
         input: input.as_bytes(),
         at: 0,
         output: [0; N],
         written: 0,
         emit,
+        jsonc,
     };
     let mut states = [0u8; 129];
     let mut depth = 0;
@@ -170,8 +221,12 @@ pub(super) const fn scan_json<const N: usize>(input: &str, emit: bool) -> ([u8; 
                     parser.punctuation(b']');
                     depth -= 1;
                 } else {
-                    parser.punctuation(b',');
-                    states[depth] = 3;
+                    if parser.comma(b']') {
+                        parser.punctuation(b']');
+                        depth -= 1;
+                    } else {
+                        states[depth] = 3;
+                    }
                 }
                 continue;
             }
@@ -195,8 +250,12 @@ pub(super) const fn scan_json<const N: usize>(input: &str, emit: bool) -> ([u8; 
                     parser.punctuation(b'}');
                     depth -= 1;
                 } else {
-                    parser.punctuation(b',');
-                    states[depth] = 6;
+                    if parser.comma(b'}') {
+                        parser.punctuation(b'}');
+                        depth -= 1;
+                    } else {
+                        states[depth] = 6;
+                    }
                 }
                 continue;
             }
@@ -231,6 +290,24 @@ pub(super) const fn scan_json<const N: usize>(input: &str, emit: bool) -> ([u8; 
 
 pub const fn json_len(input: &str) -> usize {
     scan_json::<0>(input, false).1
+}
+
+pub(super) const fn scan_json<const N: usize>(input: &str, emit: bool) -> ([u8; N], usize) {
+    scan::<N>(input, emit, false)
+}
+
+pub(super) const fn scan_jsonc<const N: usize>(input: &str, emit: bool) -> ([u8; N], usize) {
+    scan::<N>(input, emit, true)
+}
+
+pub const fn jsonc_len(input: &str) -> usize {
+    scan_jsonc::<0>(input, false).1
+}
+
+pub const fn jsonc<const N: usize>(input: &str) -> [u8; N] {
+    let (output, written) = scan_jsonc::<N>(input, true);
+    assert!(written == N);
+    output
 }
 
 pub const fn json<const N: usize>(input: &str) -> [u8; N] {

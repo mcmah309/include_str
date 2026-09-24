@@ -114,6 +114,7 @@ fn public_macros_reject_missing_files_and_invalid_utf8() {
         "include_str_trim_lines",
         "include_sql_str",
         "include_str_json",
+        "include_str_jsonc",
         "include_str_replace",
         "include_str_strip_prefix",
     ] {
@@ -153,6 +154,7 @@ fn renamed_no_std_consumer_uses_static_results_and_tracks_files() {
         pub const REPLACED: &str = strings::include_str_replace!("text.txt", "🦀", "Rust");
         pub const STRIPPED: &str = strings::include_str_strip_prefix!("text.txt", "  ");
         pub const JSON: &str = strings::include_str_json!("config.json");
+        pub const JSONC: &str = strings::include_str_jsonc!("config.json");
     "#,
     );
     let output = consumer.compile(
@@ -175,6 +177,7 @@ fn renamed_no_std_consumer_uses_static_results_and_tracks_files() {
         const _: () = assert!(equal(nested::REPLACED, "\u{3000}é Rust\n  日本語\u{a0}"));
         const _: () = assert!(equal(nested::STRIPPED, "\u{3000}é 🦀\n日本語\u{a0}"));
         const _: () = assert!(equal(nested::JSON, "{\"a\":[true,null,1e99]}"));
+        const _: () = assert!(equal(nested::JSONC, nested::JSON));
         const _: () = assert!(equal(nested::RAW, "\u{3000}é 🦀\n  日本語\u{a0}"));
         pub fn query() -> &'static str { nested::QUERY }
     "#,
@@ -251,4 +254,43 @@ fn json_and_invalid_prefixes_fail_at_compile_time() {
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("prefix must not contain a line ending")
     );
+}
+
+#[test]
+fn jsonc_validates_at_compile_time_and_accepts_only_documented_extensions() {
+    let consumer = Consumer::new();
+    for input in [
+        "/*",
+        "//only comment",
+        "[1,,]",
+        "{,}",
+        "[1,/*",
+        "[1/**/2]",
+        "tr/**/ue",
+        "null/**/null",
+        "{a:1}",
+        "{'a':1}",
+        "[0xFF]",
+        "\"\\x\"",
+    ] {
+        consumer.write("input.jsonc", input);
+        let output = consumer.compile(
+            "pub fn value() -> &'static str { strings::include_str_jsonc!(\"input.jsonc\") }",
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "accepted {input:?}");
+        assert!(
+            stderr.contains("E0080") && stderr.contains("include_str_json"),
+            "{stderr}"
+        );
+    }
+    consumer.write("input.jsonc", "//start\n{\"a\":[true,/*last*/],}//end");
+    let output = consumer.compile("#![no_std]\npub const JSON: &str = strings::include_str_jsonc!(\"input.jsonc\");\nconst _: () = assert!(JSON.len() == 12);");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let dependencies = fs::read_to_string(consumer.0.join("consumer.d")).unwrap();
+    assert!(dependencies.contains("input.jsonc"));
 }

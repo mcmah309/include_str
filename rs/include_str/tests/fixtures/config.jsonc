@@ -1,0 +1,5 @@
+// Configuration with comments and trailing commas.
+{
+    "url": "https://example.test/a/*b*/", // Preserve markers inside strings.
+    "values": [1, true, /* a value */ null,],
+}

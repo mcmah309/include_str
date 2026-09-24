@@ -184,6 +184,33 @@ macro_rules! include_str_json {
     }};
 }
 
+/// Include UTF-8 JSONC and convert it to minified, valid JSON at compile time.
+///
+/// Accepts `//` line comments, non-nested `/* ... */` block comments, and a
+/// single trailing comma in nonempty arrays or objects. Comments are allowed
+/// wherever JSON whitespace is allowed, but cannot split a number or keyword.
+/// Line comments end at CR, LF, or the end of the file.
+///
+/// Strings (including comment markers inside them), escapes, numbers, key order,
+/// and duplicate keys are preserved. All other validation rules and the nesting
+/// limit of 128 containers match [`include_str_json!`]. This is not JSON5:
+/// single quotes, unquoted keys, and hexadecimal numbers are rejected.
+///
+/// ```
+/// const JSON: &str = include_str::include_str_jsonc!("../tests/fixtures/config.jsonc");
+/// assert_eq!(JSON, r#"{"url":"https://example.test/a/*b*/","values":[1,true,null]}"#);
+/// ```
+#[macro_export]
+macro_rules! include_str_jsonc {
+    ($path:expr $(,)?) => {{
+        const INPUT: &str = $crate::include_str!($path);
+        const LEN: usize = $crate::__private::jsonc_len(INPUT);
+        const BYTES: [u8; LEN] = $crate::__private::jsonc::<LEN>(INPUT);
+        const TEXT: &str = $crate::__private::as_str(&BYTES);
+        TEXT
+    }};
+}
+
 // Public only so exported macros can use these functions in downstream crates.
 #[doc(hidden)]
 pub mod __private;

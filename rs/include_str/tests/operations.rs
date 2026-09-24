@@ -1,6 +1,24 @@
 use include_str::{include_str_json, include_str_replace, include_str_strip_prefix};
 
 #[test]
+fn jsonc_converts_files_in_const_and_static_contexts() {
+    const JSON: &str = include_str::include_str_jsonc!("fixtures/config.jsonc",);
+    static ABSOLUTE: &str = include_str::include_str_jsonc!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/config.jsonc"
+    ));
+    assert_eq!(
+        JSON,
+        r#"{"url":"https://example.test/a/*b*/","values":[1,true,null]}"#
+    );
+    assert_eq!(ABSOLUTE, JSON);
+    assert_eq!(
+        include_str::include_str_jsonc!("fixtures/config.json"),
+        include_str_json!("fixtures/config.json")
+    );
+}
+
+#[test]
 fn replacements_work_in_constants_and_statics() {
     const FROM: &str = "world";
     const TO: &str = "🦀 Rust";

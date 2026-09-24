@@ -281,3 +281,185 @@ fn all_number_components_are_validated_without_float_conversion() {
         }
     }
 }
+
+fn converted(input: &str) -> String {
+    let (bytes, len) = json::scan_jsonc::<8192>(input, true);
+    assert_eq!(len, jsonc_len(input));
+    let output = String::from(as_str(&bytes[..len]));
+    // Every successful conversion must also pass the strict JSON parser.
+    assert_eq!(minified(&output), output);
+    output
+}
+
+#[test]
+fn jsonc_comments_and_trailing_commas_produce_strict_json() {
+    for (input, expected) in [
+        ("/*start*/ null //end", "null"),
+        ("//start\r\n[1,//value\r2,/*last*/]//end", "[1,2]"),
+        (
+            r#"{/*key*/"a"/*colon*/:/*value*/1/*comma*/,/*next*/"b":[true,],/*end*/}"#,
+            r#"{"a":1,"b":[true]}"#,
+        ),
+        ("[/*empty*/]", "[]"),
+        ("{/*empty*/}", "{}"),
+        ("[{},[],]", "[{},[]]"),
+        ("[1,/*a*//*b*/]", "[1]"),
+        ("[1,//end\n]", "[1]"),
+        ("[1/*comment*/,2]", "[1,2]"),
+        ("/* ' \" [ } // */true", "true"),
+        ("/* 🦀 日本語 */ 1.230e+99", "1.230e+99"),
+        ("[1,// \u{2028} still comment\n2]", "[1,2]"),
+    ] {
+        assert_eq!(converted(input), expected);
+    }
+}
+
+#[test]
+fn jsonc_preserves_strings_escapes_numbers_and_duplicate_keys() {
+    for input in [
+        r#""https://example.test/a/*b*/""#,
+        r#""escaped quote: \" // still a string""#,
+        r#""backslash: \\""#,
+        r#""\/\u002f\uDEAD""#,
+        "\"a  b\\n\\t🦀\"",
+        "1e999999",
+        "-0.000E+99",
+        r#"{"x":1,"x":2}"#,
+    ] {
+        assert_eq!(converted(&format!("/*before*/{input}//after")), input);
+        assert_eq!(converted(input), input);
+    }
+    for count in 0..32 {
+        let slashes = "\\".repeat(count * 2);
+        let token = format!("\"{slashes}\"");
+        assert_eq!(converted(&format!("{token}//end")), token);
+        let token = format!("\"{slashes}\\\" // literal\"");
+        assert_eq!(converted(&format!("{token}/*end*/")), token);
+    }
+}
+
+#[test]
+fn jsonc_rejects_malformed_input_and_never_joins_split_tokens() {
+    for input in [
+        "",
+        "//only comment",
+        "/*only comment*/",
+        "/*",
+        "null/*",
+        "[1,/*",
+        "/* outer /* inner */ end */null", // No nested block comments.
+        "[,]",
+        "[1,,]",
+        "{,}",
+        r#"{"a":1,,}"#,
+        "[1,}",
+        r#"{"a":1,]"#,
+        "[1,/*comment*/",
+        "true,",
+        "null/**/null",
+        "1/*x*/2",
+        "[1/**/2]",
+        "1/*x*/.5",
+        "1. /*x*/ 5",
+        "1e/*x*/2",
+        "-/*x*/1",
+        "tr/*x*/ue",
+        "nu//x\nll",
+        "[true/*x*/false]",
+        r#"{"a"/*x*/1}"#,
+        r#"{"a":/*x*/}"#,
+        "{unquoted:1}",
+        "{'a':1}",
+        "[0xFF]",
+        "[NaN]",
+        "[Infinity]",
+        "01",
+        "+1",
+        ".5",
+        "[1//comment swallows closer]",
+        "null /",
+        "null /x",
+        "null */",
+        "\"a\nb\"",
+        r#""\x""#,
+        r#""\u12xx""#,
+        "\u{feff}{}",
+        "\u{a0}null",
+    ] {
+        for emit in [false, true] {
+            let panic = std::panic::catch_unwind(|| json::scan_jsonc::<8192>(input, emit))
+                .expect_err(input);
+            let message = panic
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
+                .unwrap();
+            assert!(
+                message.starts_with("include_str_json"),
+                "{input:?}: {message}"
+            );
+            assert!(!message.contains("index out of bounds"), "{message}");
+        }
+    }
+}
+
+#[test]
+fn strict_json_still_rejects_jsonc_extensions() {
+    for input in [
+        "//comment\nnull",
+        "null/*comment*/",
+        "[1,]",
+        r#"{"a":1,}"#,
+        "[/*comment*/]",
+    ] {
+        assert!(std::panic::catch_unwind(|| json_len(input)).is_err());
+        converted(input);
+    }
+}
+
+#[test]
+fn generated_jsonc_converts_to_independently_constructed_json() {
+    let atoms = [
+        "null",
+        "false",
+        "true",
+        "-1.00E+03",
+        r#"" // /* */ ""#,
+        r#""\"\\\u0041🦀""#,
+    ];
+    let comments = [
+        "/**/",
+        "/* ' \" // 🦀 */",
+        "//comment\n",
+        "//comment\r",
+        "//comment\r\n",
+    ];
+    for case in 0..2048 {
+        let atom = atoms[case % atoms.len()];
+        let c = comments[(case / atoms.len()) % comments.len()];
+        let mut input = format!("{c}{atom}{c}");
+        let mut expected = String::from(atom);
+        for level in 0..case % 12 {
+            let comma = if (case + level) % 3 == 0 { "," } else { "" };
+            if (case + level) % 2 == 0 {
+                input = format!("[{c}{input}{c},{c}{atom}{c}{comma}{c}]");
+                expected = format!("[{expected},{atom}]");
+            } else {
+                input = format!("{{{c}\"key\"{c}:{c}{input}{c}{comma}{c}}}");
+                expected = format!("{{\"key\":{expected}}}");
+            }
+        }
+        assert_eq!(converted(&input), expected, "case {case}");
+    }
+}
+
+#[test]
+fn jsonc_enforces_the_shared_nesting_limit() {
+    let input = format!("{}0{}", "[/*open*/".repeat(128), ",/*close*/]".repeat(128));
+    assert_eq!(
+        converted(&input),
+        format!("{}0{}", "[".repeat(128), "]".repeat(128))
+    );
+    let too_deep = format!("[{input}]");
+    assert!(std::panic::catch_unwind(|| jsonc_len(&too_deep)).is_err());
+}
