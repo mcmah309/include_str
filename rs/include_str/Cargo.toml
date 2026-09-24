@@ -1,8 +1,10 @@
 [package]
 name = "include_str"
-# description = ""
+description = "Include UTF-8 files with compile-time trimming and SQL preprocessing"
 version = "0.0.1"
 edition = "2024"
+rust-version = "1.85"
+readme = "README.md"
 # repository = ""
 # license = "" # e.g. `Apache-2.0`
 # categories = []
