@@ -463,3 +463,53 @@ fn trimming_copies_exact_bytes_without_normalizing_the_middle() {
     const BYTES: [u8; LEN] = trim::<LEN>(INPUT);
     assert_eq!(as_str(&BYTES), INPUT.trim());
 }
+
+#[test]
+fn line_trimming_matches_standard_library_for_generated_text() {
+    let atoms = [
+        "a",
+        "é",
+        "🦀",
+        "日本語",
+        " ",
+        "\t",
+        "\n",
+        "\r\n",
+        "\r",
+        "\0",
+        "\u{200b}",
+        "\u{feff}",
+    ];
+    let whitespace: Vec<char> = (0..=0x10ffff)
+        .filter_map(char::from_u32)
+        .filter(|c| c.is_whitespace())
+        .collect();
+    let mut seed = 0x3920_7841_u64;
+    for case in 0..2048 {
+        let mut input = String::new();
+        for index in 0..case % 64 {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+            input.push_str(atoms[(seed >> 32) as usize % atoms.len()]);
+            input.push(whitespace[index % whitespace.len()]);
+        }
+        let expected: String = input
+            .split_inclusive('\n')
+            .map(|line| {
+                let (content, ending) = if let Some(content) = line.strip_suffix("\r\n") {
+                    (content, "\r\n")
+                } else if let Some(content) = line.strip_suffix('\n') {
+                    (content, "\n")
+                } else {
+                    (line, "")
+                };
+                format!("{}{ending}", content.trim())
+            })
+            .collect();
+        let (bytes, len) = scan_trim_lines::<4096>(&input, true);
+        assert_eq!(len, trim_lines_len(&input));
+        let actual = as_str(&bytes[..len]);
+        assert_eq!(actual, expected, "input: {input:?}");
+        let (again, again_len) = scan_trim_lines::<4096>(actual, true);
+        assert_eq!(as_str(&again[..again_len]), actual);
+    }
+}

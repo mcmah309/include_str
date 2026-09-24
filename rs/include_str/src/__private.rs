@@ -97,6 +97,62 @@ pub const fn trim<const N: usize>(input: &str) -> [u8; N] {
     output
 }
 
+// Share the sizing and emitting passes; copy trimmed content and line endings
+// separately so trimming cannot remove blank lines or normalize CRLF to LF.
+const fn scan_trim_lines<const N: usize>(input: &str, emit: bool) -> ([u8; N], usize) {
+    let bytes = input.as_bytes();
+    let mut output = [0; N];
+    let mut written = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        let mut start = i;
+        let mut end = i;
+        let mut leading = true;
+        while i < bytes.len() && bytes[i] != b'\n' {
+            let white = whitespace_len(bytes, i);
+            let len = char_len(bytes[i]);
+            if white == 0 {
+                leading = false;
+                end = i + len;
+            } else if leading {
+                start += len;
+            }
+            i += len;
+        }
+        while start < end {
+            if emit {
+                output[written] = bytes[start];
+            }
+            written += 1;
+            start += 1;
+        }
+        if i < bytes.len() {
+            if i > 0 && bytes[i - 1] == b'\r' {
+                if emit {
+                    output[written] = b'\r';
+                }
+                written += 1;
+            }
+            if emit {
+                output[written] = b'\n';
+            }
+            written += 1;
+            i += 1;
+        }
+    }
+    (output, written)
+}
+
+pub const fn trim_lines_len(input: &str) -> usize {
+    scan_trim_lines::<0>(input, false).1
+}
+
+pub const fn trim_lines<const N: usize>(input: &str) -> [u8; N] {
+    let (output, written) = scan_trim_lines::<N>(input, true);
+    assert!(N == written);
+    output
+}
+
 const fn pair(bytes: &[u8], i: usize, a: u8, b: u8) -> bool {
     i + 1 < bytes.len() && bytes[i] == a && bytes[i + 1] == b
 }

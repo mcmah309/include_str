@@ -34,6 +34,28 @@ macro_rules! include_str_trim {
     }};
 }
 
+/// Include a UTF-8 file and trim Unicode whitespace from each line.
+///
+/// Preserves whitespace within lines, blank lines, and original LF or CRLF line
+/// endings, including a final line ending. A lone carriage return is whitespace,
+/// not a line separator. Other Unicode whitespace follows [`str::trim`].
+/// Accepts the same path expressions as [`include_str!`].
+///
+/// ```
+/// const TEXT: &str = include_str::include_str_trim_lines!("../tests/fixtures/message.txt");
+/// assert_eq!(TEXT, "Hello, world!\r\n");
+/// ```
+#[macro_export]
+macro_rules! include_str_trim_lines {
+    ($path:expr $(,)?) => {{
+        const INPUT: &str = $crate::include_str!($path);
+        const LEN: usize = $crate::__private::trim_lines_len(INPUT);
+        const BYTES: [u8; LEN] = $crate::__private::trim_lines::<LEN>(INPUT);
+        const TEXT: &str = $crate::__private::as_str(&BYTES);
+        TEXT
+    }};
+}
+
 /// Include SQL, strip comments, and collapse unquoted whitespace to one space.
 ///
 /// Removes `--` line comments and `/* ... */` block comments (including nested

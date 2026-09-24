@@ -108,7 +108,12 @@ fn public_macros_reject_malformed_sql_at_compile_time() {
 fn public_macros_reject_missing_files_and_invalid_utf8() {
     let consumer = Consumer::new();
     consumer.write("invalid.txt", [0xff, 0xfe, b'a']);
-    for name in ["include_str", "include_str_trim", "include_sql_str"] {
+    for name in [
+        "include_str",
+        "include_str_trim",
+        "include_str_trim_lines",
+        "include_sql_str",
+    ] {
         for (file, diagnostic) in [("missing.txt", "couldn't read"), ("invalid.txt", "utf-8")] {
             let output = consumer.compile(&format!(
                 "pub const VALUE: &str = strings::{name}!(\"{file}\");"
@@ -135,6 +140,7 @@ fn renamed_no_std_consumer_uses_static_results_and_tracks_files() {
         pub const QUERY: &str = strings::include_sql_str!("query.sql",);
         pub static TEXT: &str = strings::include_str_trim!(concat!("text", ".txt"),);
         pub const RAW: &str = strings::include_str!("text.txt");
+        pub const LINES: &str = strings::include_str_trim_lines!(concat!("text", ".txt"),);
     "#,
     );
     let output = consumer.compile(
@@ -153,6 +159,7 @@ fn renamed_no_std_consumer_uses_static_results_and_tracks_files() {
         }
         const _: () = assert!(equal(nested::QUERY, "SELECT 'a  -- b';"));
         const _: () = assert!(equal(nested::TEXT, "é 🦀\n  日本語"));
+        const _: () = assert!(equal(nested::LINES, "é 🦀\n日本語"));
         const _: () = assert!(equal(nested::RAW, "\u{3000}é 🦀\n  日本語\u{a0}"));
         pub fn query() -> &'static str { nested::QUERY }
     "#,
