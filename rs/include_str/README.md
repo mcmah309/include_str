@@ -2,7 +2,6 @@
 
 Include UTF-8 files as static strings, with optional compile-time preprocessing.
 No dependencies, no allocation, no runtime processing, and compatible with `no_std`.
-Requires Rust 1.85 or newer.
 
 ```toml
 [dependencies]
@@ -35,7 +34,7 @@ nesting limit as `include_str_json!`; single quotes, unquoted keys, hexadecimal
 numbers, and comments splitting numbers or keywords are rejected. The existing
 `include_str_json!` remains strict JSON.
 
-For example, this SQL:
+For SQL, this example:
 
 ```sql
 -- Find active users
