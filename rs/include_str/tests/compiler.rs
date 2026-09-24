@@ -294,3 +294,289 @@ fn jsonc_validates_at_compile_time_and_accepts_only_documented_extensions() {
     let dependencies = fs::read_to_string(consumer.0.join("consumer.d")).unwrap();
     assert!(dependencies.contains("input.jsonc"));
 }
+
+#[test]
+fn every_macro_works_in_all_contexts_with_renaming_and_shadowed_names() {
+    let consumer = Consumer::new();
+    consumer.write("input with spaces 🦀.txt", " \t\"é 🦀\" \r\n");
+    let cases = [
+        ("include_str", "", " \t\"é 🦀\" \r\n"),
+        ("include_str_trim", "", "\"é 🦀\""),
+        ("include_str_trim_lines", "", "\"é 🦀\"\r\n"),
+        ("include_sql_str", "", "\"é 🦀\""),
+        ("include_str_json", "", "\"é 🦀\""),
+        ("include_str_jsonc", "", "\"é 🦀\""),
+        ("include_str_replace", ", FROM, TO", " \t\"Rust 🦀\" \r\n"),
+        ("include_str_strip_prefix", ", PREFIX", "\"é 🦀\" \r\n"),
+    ];
+    let mut source = String::from(
+        r#"
+        #![no_std]
+        const INPUT: &str = "caller";
+        const TEXT: &str = "caller";
+        const LEN: usize = 123;
+        const BYTES: &[u8] = b"caller";
+        const FROM: &str = "é";
+        const TO: &str = "Rust";
+        const PREFIX: &str = " \t";
+        const fn equal(a: &str, b: &str) -> bool {
+            let (a,b) = (a.as_bytes(), b.as_bytes());
+            if a.len() != b.len() { return false; }
+            let mut i = 0;
+            while i < a.len() { if a[i] != b[i] { return false; } i += 1; }
+            true
+        }
+    "#,
+    );
+    for (index, (name, extra, expected)) in cases.iter().enumerate() {
+        // Trailing commas, concat!, a renamed dependency, repeated expansion,
+        // expression/static/const contexts and caller constants named like internals.
+        let invocation =
+            format!("strings::{name}!(concat!(\"input with spaces \", \"🦀.txt\"){extra},)");
+        source.push_str(&format!(
+            "const C{index}: &str = {invocation};\nstatic S{index}: &str = {invocation};\n\
+             pub fn f{index}() -> &'static str {{ {invocation} }}\n\
+             const _: () = assert!(equal(C{index}, {expected:?}));\n\
+             const _: () = assert!(equal(S{index}, {expected:?}));\n"
+        ));
+    }
+    source.push_str("const _: () = assert!(equal(INPUT,TEXT) && LEN == 123 && BYTES.len() == 6);");
+    let output = consumer.compile(&source);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn every_macro_rejects_invalid_arguments_without_runtime_fallback() {
+    let consumer = Consumer::new();
+    consumer.write("input.txt", "null");
+    for name in [
+        "include_str",
+        "include_str_trim",
+        "include_str_trim_lines",
+        "include_sql_str",
+        "include_str_replace",
+        "include_str_strip_prefix",
+        "include_str_json",
+        "include_str_jsonc",
+    ] {
+        for arguments in ["", "\"input.txt\", \"x\", \"y\", \"extra\""] {
+            let output = consumer.compile(&format!(
+                "pub const X: &str = strings::{name}!({arguments});"
+            ));
+            assert!(!output.status.success(), "{name} accepted ({arguments})");
+        }
+    }
+    for body in [
+        "strings::include_str_replace!(\"input.txt\", runtime, \"x\")",
+        "strings::include_str_replace!(\"input.txt\", \"x\", runtime)",
+        "strings::include_str_strip_prefix!(\"input.txt\", runtime)",
+        "strings::include_str_replace!(\"input.txt\", 42, \"x\")",
+        "strings::include_str_strip_prefix!(\"input.txt\", b\"x\")",
+    ] {
+        let output = consumer.compile(&format!(
+            "pub fn test(runtime: &str) -> &'static str {{ {body} }}"
+        ));
+        assert!(!output.status.success(), "accepted {body}");
+    }
+}
+
+#[test]
+fn invalid_utf8_corpus_files_are_rejected_by_the_public_json_macros() {
+    let consumer = Consumer::new();
+    let dir =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/json-test-suite/test_parsing");
+    let mut tested = 0;
+    for entry in fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        let bytes = fs::read(&path).unwrap();
+        if std::str::from_utf8(&bytes).is_ok() {
+            continue;
+        }
+        consumer.write("input.json", bytes);
+        for name in ["include_str_json", "include_str_jsonc"] {
+            let output = consumer.compile(&format!(
+                "pub const X: &str = strings::{name}!(\"input.json\");"
+            ));
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(!output.status.success(), "{}: {name}", path.display());
+            assert!(stderr.to_lowercase().contains("utf-8"), "{stderr}");
+        }
+        tested += 1;
+    }
+    assert!(
+        tested >= 20,
+        "invalid UTF-8 corpus coverage unexpectedly shrank: {tested}"
+    );
+}
+
+#[test]
+fn accepted_upstream_corpus_files_expand_at_compile_time() {
+    let consumer = Consumer::new();
+    let dir =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/json-test-suite/test_parsing");
+    let mut source = String::from("#![no_std]\n");
+    let mut tested = 0;
+    for entry in fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if !path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("y_")
+        {
+            continue;
+        }
+        source.push_str(&format!(
+            "pub const JSON{tested}: &str = strings::include_str_json!({path:?});\n\
+             pub static JSONC{tested}: &str = strings::include_str_jsonc!({path:?});\n"
+        ));
+        tested += 1;
+    }
+    assert!(tested > 90);
+    let output = consumer.compile(&source);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn all_text_macros_preserve_raw_control_bytes_and_only_change_requested_content() {
+    let consumer = Consumer::new();
+    let mut input = String::new();
+    for byte in 0..=127u8 {
+        input.push(byte as char);
+    }
+    input.push_str("é🦀\u{feff}\u{200b}");
+    consumer.write("input.txt", &input);
+    let lines: String = input
+        .split_inclusive('\n')
+        .map(|line| {
+            let (body, ending) = if let Some(body) = line.strip_suffix("\r\n") {
+                (body, "\r\n")
+            } else if let Some(body) = line.strip_suffix('\n') {
+                (body, "\n")
+            } else {
+                (line, "")
+            };
+            format!("{}{ending}", body.trim())
+        })
+        .collect();
+    let cases = [
+        ("include_str", "", input.clone()),
+        ("include_str_trim", "", input.trim().into()),
+        ("include_str_trim_lines", "", lines),
+        (
+            "include_str_replace",
+            ", \"\", \"🦀\"",
+            input.replace("", "🦀"),
+        ),
+        (
+            "include_str_replace",
+            ", \"é\", \"\"",
+            input.replace('é', ""),
+        ),
+        (
+            "include_str_strip_prefix",
+            ", \"\\0\"",
+            input.strip_prefix('\0').unwrap().into(),
+        ),
+    ];
+    let mut source = String::from(
+        r#"
+        #![no_std]
+        const fn same(a: &str, b: &str) -> bool {
+            let (a,b) = (a.as_bytes(), b.as_bytes());
+            if a.len() != b.len() { return false; }
+            let mut i = 0;
+            while i < a.len() { if a[i] != b[i] { return false; } i += 1; }
+            true
+        }
+    "#,
+    );
+    for (name, extra, expected) in cases {
+        source.push_str(&format!(
+            "const _: () = assert!(same(strings::{name}!(\"input.txt\"{extra}), {expected:?}));\n"
+        ));
+    }
+    let output = consumer.compile(&source);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn large_documents_use_exact_sized_output_arrays_at_compile_time() {
+    let consumer = Consumer::new();
+    let mut input = String::from("{\n\"text\": \"");
+    input.push_str(&"é 🦀 // literal ".repeat(128));
+    input.push_str("\",\n\"values\": [");
+    input.push_str(&" {\"x\": [true, false, null, 1.230e+9]},\n".repeat(127));
+    input.push_str("{\"x\": [true, false, null, 1.230e+9]}] }");
+    consumer.write("large.json", &input);
+    consumer.write("large.jsonc", format!("/*start*/{input}//end"));
+    let output = consumer.compile(
+        r#"
+        #![no_std]
+        pub const JSON: &str = strings::include_str_json!("large.json");
+        pub const JSONC: &str = strings::include_str_jsonc!("large.jsonc");
+        const fn equal(a: &str, b: &str) -> bool {
+            let (a,b) = (a.as_bytes(), b.as_bytes());
+            if a.len() != b.len() { return false; }
+            let mut i = 0;
+            while i < a.len() { if a[i] != b[i] { return false; } i += 1; }
+            true
+        }
+        const _: () = assert!(equal(JSON, JSONC));
+        const _: () = assert!(JSON.len() > 5000);
+    "#,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn empty_and_whitespace_files_have_explicit_results_for_every_macro() {
+    let consumer = Consumer::new();
+    let text_cases = [
+        ("include_str", "", ""),
+        ("include_str_trim", "", ""),
+        ("include_str_trim_lines", "", ""),
+        ("include_sql_str", "", ""),
+        ("include_str_replace", ", \"\", \"x\"", "x"),
+        ("include_str_strip_prefix", ", \"\"", ""),
+    ];
+    consumer.write("empty.txt", "");
+    for (name, extra, expected) in text_cases {
+        let output = consumer.compile(&format!(
+            "pub const X: &str = strings::{name}!(\"empty.txt\"{extra});\nconst _: () = assert!(X.len() == {});",
+            expected.len()
+        ));
+        assert!(
+            output.status.success(),
+            "{name}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    for content in ["", " \r\n\t", "\u{3000}\u{a0}"] {
+        consumer.write("empty.txt", content);
+        for name in ["include_str_json", "include_str_jsonc"] {
+            let output = consumer.compile(&format!(
+                "pub const X: &str = strings::{name}!(\"empty.txt\");"
+            ));
+            assert!(!output.status.success(), "{name} accepted {content:?}");
+            assert!(String::from_utf8_lossy(&output.stderr).contains("E0080"));
+        }
+    }
+}

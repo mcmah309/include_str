@@ -6,6 +6,9 @@ mod tests;
 #[cfg(test)]
 mod operations_tests;
 
+#[cfg(test)]
+mod edge_tests;
+
 mod json;
 mod transforms;
 pub use json::{json, json_len, jsonc, jsonc_len};
