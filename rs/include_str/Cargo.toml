@@ -1,7 +1,7 @@
 [package]
 name = "include_str"
-description = "Include UTF-8 files with compile-time preprocessing including sql, json, jsonc, replacement, trimming, lines, etc."
-version = "0.1.1"
+description = "Include UTF-8 files with compile-time preprocessing including sql, json, jsonc, replacement, whitespace, trimming, lines, etc."
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.85"
 readme = "README.md"
