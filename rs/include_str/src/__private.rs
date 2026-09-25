@@ -209,6 +209,47 @@ pub const fn trim_lines<const N: usize>(input: &str) -> [u8; N] {
     output
 }
 
+const fn scan_remove_empty_lines<const N: usize>(input: &str, emit: bool) -> ([u8; N], usize) {
+    let bytes = input.as_bytes();
+    let mut output = [0; N];
+    let mut written = 0;
+    let mut start = 0;
+    while start < bytes.len() {
+        let mut end = start;
+        while end < bytes.len() && bytes[end] != b'\n' {
+            end += 1;
+        }
+        let content_end = if end < bytes.len() && end > start && bytes[end - 1] == b'\r' {
+            end - 1
+        } else {
+            end
+        };
+        let next = if end < bytes.len() { end + 1 } else { end };
+        if content_end > start {
+            let mut i = start;
+            while i < next {
+                if emit {
+                    output[written] = bytes[i];
+                }
+                written += 1;
+                i += 1;
+            }
+        }
+        start = next;
+    }
+    (output, written)
+}
+
+pub const fn remove_empty_lines_len(input: &str) -> usize {
+    scan_remove_empty_lines::<0>(input, false).1
+}
+
+pub const fn remove_empty_lines<const N: usize>(input: &str) -> [u8; N] {
+    let (output, written) = scan_remove_empty_lines::<N>(input, true);
+    assert!(N == written);
+    output
+}
+
 const fn pair(bytes: &[u8], i: usize, a: u8, b: u8) -> bool {
     i + 1 < bytes.len() && bytes[i] == a && bytes[i + 1] == b
 }

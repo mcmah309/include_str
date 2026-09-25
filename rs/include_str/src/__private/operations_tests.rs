@@ -537,3 +537,23 @@ fn jsonc_enforces_the_shared_nesting_limit() {
     let too_deep = format!("[{input}]");
     assert!(std::panic::catch_unwind(|| jsonc_len(&too_deep)).is_err());
 }
+#[test]
+fn remove_empty_lines_matches_standard_line_filtering() {
+    let atoms = ["a", "é", " ", "\t", "\r", "\n"];
+    for size in 0..=5 {
+        for mut combination in 0..atoms.len().pow(size) {
+            let mut input = String::new();
+            for _ in 0..size {
+                input.push_str(atoms[combination % atoms.len()]);
+                combination /= atoms.len();
+            }
+            let expected: String = input
+                .split_inclusive('\n')
+                .filter(|line| !matches!(*line, "\n" | "\r\n"))
+                .collect();
+            let (bytes, len) = super::scan_remove_empty_lines::<16>(&input, true);
+            assert_eq!(&bytes[..len], expected.as_bytes(), "{input:?}");
+            assert_eq!(super::remove_empty_lines_len(&input), len);
+        }
+    }
+}

@@ -29,6 +29,7 @@
 /// Supported operations:
 /// - `trim`: remove leading and trailing Unicode whitespace.
 /// - `trim_lines`: trim each line, preserving LF/CRLF endings.
+/// - `remove_empty_lines`: remove empty lines, preserving whitespace-only lines.
 /// - `collapse_whitespace`: collapse runs using newline > tab > space precedence.
 /// - `replace_whitespace(replacement)`: replace each run with a constant string;
 ///   `replace_whitespace(" ")` uses one ASCII space.
@@ -73,6 +74,14 @@
 /// Preserves whitespace within lines, blank lines, and original LF or CRLF line
 /// endings, including a final line ending. A lone carriage return is whitespace,
 /// not a line separator. Other Unicode whitespace follows [`str::trim`].
+///
+/// ## `remove_empty_lines`
+///
+/// Remove lines with no content, including their LF or CRLF endings.
+///
+/// Retained lines keep their original content and line endings. Whitespace-only
+/// lines are preserved; use `trim_lines => remove_empty_lines` to remove them too.
+/// A lone CR is content, not a line separator. Empty input stays empty.
 ///
 /// ## `collapse_whitespace`
 ///
@@ -206,6 +215,9 @@ mod pipeline;
 /// on the whole text before splitting, not independently on each line. Use
 /// `trim_lines` to trim each line. Processing and splitting happen at compile
 /// time; entries borrow from the resulting static text without runtime allocation.
+/// Use `trim_lines => remove_empty_lines` for word lists or lookup tables where
+/// surrounding whitespace and blank lines should be ignored. Trimming first makes
+/// whitespace-only lines empty so they can be removed.
 ///
 /// ```
 /// const WORDS: &[&str] = include_str::include_lines!("../tests/fixtures/words.txt");

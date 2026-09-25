@@ -305,6 +305,7 @@ fn every_macro_works_in_all_contexts_with_renaming_and_shadowed_names() {
         ),
         ("include_str", " => trim", "\"é 🦀\""),
         ("include_str", " => trim_lines", "\"é 🦀\"\r\n"),
+        ("include_str", " => remove_empty_lines", " \t\"é 🦀\" \r\n"),
         ("include_str", " => sql", "\"é 🦀\""),
         ("include_str", " => json", "\"é 🦀\""),
         ("include_str", " => jsonc", "\"é 🦀\""),
@@ -439,6 +440,10 @@ fn pipelines_reject_unknown_operations_and_preserve_validation() {
             "unknown operation or invalid arguments: typo",
         ),
         ("trim()", "unknown operation or invalid arguments: trim"),
+        (
+            "remove_empty_lines()",
+            "unknown operation or invalid arguments",
+        ),
         (
             "collapse_whitespace(\" \")",
             "unknown operation or invalid arguments",

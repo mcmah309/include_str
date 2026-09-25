@@ -24,6 +24,7 @@ no longer be valid JSON.
 | --- | --- |
 | `trim` | Remove leading and trailing Unicode whitespace. |
 | `trim_lines` | Trim each line, preserving LF/CRLF endings. |
+| `remove_empty_lines` | Remove empty lines and their endings; preserve whitespace-only lines. |
 | `collapse_whitespace` | Collapse each whitespace run using newline > tab > space precedence. |
 | `replace_whitespace(replacement)` | Replace each whitespace run with a string, e.g. `" "`, `" / "`, or `""`. |
 | `replace(from, to)` | Replace all non-overlapping literal matches. |
@@ -32,6 +33,16 @@ no longer be valid JSON.
 | `sql` | Strip SQL comments, compact unquoted whitespace, and trim. |
 | `json` | Validate strict JSON and remove whitespace outside strings. |
 | `jsonc` | Accept comments and trailing commas, producing minified JSON. |
+
+Use `trim_lines => remove_empty_lines` for word lists or lookup tables where
+surrounding whitespace and blank lines should be ignored. Trimming first makes
+whitespace-only lines empty so they can be removed:
+
+```rust
+const WORDS: &[&str] = include_str::include_lines!(
+    "words.txt" => trim_lines => remove_empty_lines
+);
+```
 
 Paths are relative to the invoking Rust source file. Path expressions such as
 `concat!(env!("CARGO_MANIFEST_DIR"), "/queries/users.sql")` also work.
