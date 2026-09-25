@@ -2,6 +2,45 @@ extern crate std;
 use super::*;
 use std::{format, string::String};
 
+#[test]
+fn custom_whitespace_collapse_matches_standard_library() {
+    let atoms = ["a", "é", "🦀", " ", "\t", "\r\n", "\u{2003}"];
+    for size in 0..=4 {
+        for mut combination in 0..atoms.len().pow(size) {
+            let mut input = String::new();
+            for _ in 0..size {
+                input.push_str(atoms[combination % atoms.len()]);
+                combination /= atoms.len();
+            }
+            for replacement in ["", " ", "my value", "🦀\n"] {
+                let words: std::vec::Vec<_> = input.split_whitespace().collect();
+                let expected = if input.is_empty() {
+                    String::new()
+                } else if words.is_empty() {
+                    String::from(replacement)
+                } else {
+                    let mut text = words.join(replacement);
+                    if input.starts_with(char::is_whitespace) {
+                        text.insert_str(0, replacement);
+                    }
+                    if input.ends_with(char::is_whitespace) {
+                        text.push_str(replacement);
+                    }
+                    text
+                };
+                let (bytes, len) =
+                    transforms::scan_collapse_whitespace::<128>(&input, true, Some(replacement));
+                assert_eq!(len, collapse_whitespace_with_len(&input, replacement));
+                assert_eq!(
+                    as_str(&bytes[..len]),
+                    expected,
+                    "{input:?}, {replacement:?}"
+                );
+            }
+        }
+    }
+}
+
 fn replaced(input: &str, from: &str, to: &str) -> String {
     let (bytes, len) = transforms::scan_replace::<8192>(input, from, to, true);
     assert_eq!(len, replace_len(input, from, to));

@@ -388,6 +388,9 @@ fn every_macro_rejects_invalid_arguments_without_runtime_fallback() {
         }
     }
     for body in [
+        "strings::include_str!(\"input.txt\" => collapse_whitespace(runtime))",
+        "strings::include_str!(\"input.txt\" => collapse_whitespace(42))",
+        "strings::include_str!(\"input.txt\" => collapse_whitespace(b\"x\"))",
         "strings::include_str_replace!(\"input.txt\", runtime, \"x\")",
         "strings::include_str_replace!(\"input.txt\", \"x\", runtime)",
         "strings::include_str_strip_line_prefix!(\"input.txt\", runtime)",
@@ -442,7 +445,7 @@ fn pipelines_reject_unknown_operations_and_preserve_validation() {
         ),
         ("trim()", "unknown operation or invalid arguments: trim"),
         (
-            "collapse_whitespace(tab)",
+            "collapse_whitespace(\"a\", \"b\")",
             "unknown operation or invalid arguments",
         ),
         (

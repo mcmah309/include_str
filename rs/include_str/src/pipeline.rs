@@ -25,8 +25,11 @@ macro_rules! __include_str_operation {
     ($input:expr; collapse_whitespace) => {
         $crate::__include_str_operation!(@transform $input; collapse_whitespace_len, collapse_whitespace)
     };
-    ($input:expr; collapse_whitespace(space)) => {
+    ($input:expr; collapse_whitespace(space $(,)?)) => {
         $crate::__include_str_operation!(@transform $input; collapse_whitespace_len, collapse_whitespace_as_space)
+    };
+    ($input:expr; collapse_whitespace($replacement:expr $(,)?)) => {
+        $crate::__include_str_operation!(@transform $input; collapse_whitespace_with_len, collapse_whitespace_with, $replacement)
     };
     ($input:expr; sql) => {
         $crate::__include_str_operation!(@transform $input; sql_len, sql)
@@ -59,7 +62,7 @@ macro_rules! __include_str_operation {
         ::core::compile_error!(::core::concat!(
             "include_str!: unknown operation or invalid arguments: ",
             ::core::stringify!($($invalid)*),
-            "; expected trim, trim_lines, collapse_whitespace, collapse_whitespace(space), ",
+            "; expected trim, trim_lines, collapse_whitespace, collapse_whitespace(replacement), ",
             "replace(from, to), strip_line_prefix(prefix), sql, json, or jsonc"
         ))
     };

@@ -1,9 +1,9 @@
 use super::{char_len, whitespace_len};
 
-const fn scan_collapse_whitespace<const N: usize>(
+pub(super) const fn scan_collapse_whitespace<const N: usize>(
     input: &str,
     emit: bool,
-    as_space: bool,
+    replacement: Option<&str>,
 ) -> ([u8; N], usize) {
     let bytes = input.as_bytes();
     let mut output = [0; N];
@@ -22,19 +22,30 @@ const fn scan_collapse_whitespace<const N: usize>(
                     b'\t' => 1,
                     _ => 0,
                 };
-                if !as_space && rank > strongest {
+                if rank > strongest {
                     strongest = rank;
                 }
                 i += len;
             }
-            if emit {
-                output[written] = match strongest {
-                    2 => b'\n',
-                    1 => b'\t',
-                    _ => b' ',
-                };
+            if let Some(text) = replacement {
+                let mut j = 0;
+                while j < text.len() {
+                    if emit {
+                        output[written] = text.as_bytes()[j];
+                    }
+                    written += 1;
+                    j += 1;
+                }
+            } else {
+                if emit {
+                    output[written] = match strongest {
+                        2 => b'\n',
+                        1 => b'\t',
+                        _ => b' ',
+                    };
+                }
+                written += 1;
             }
-            written += 1;
         } else {
             let end = i + char_len(bytes[i]);
             while i < end {
@@ -50,17 +61,25 @@ const fn scan_collapse_whitespace<const N: usize>(
 }
 
 pub const fn collapse_whitespace_len(input: &str) -> usize {
-    scan_collapse_whitespace::<0>(input, false, false).1
+    scan_collapse_whitespace::<0>(input, false, None).1
 }
 
 pub const fn collapse_whitespace<const N: usize>(input: &str) -> [u8; N] {
-    let (output, written) = scan_collapse_whitespace::<N>(input, true, false);
+    let (output, written) = scan_collapse_whitespace::<N>(input, true, None);
     assert!(written == N);
     output
 }
 
 pub const fn collapse_whitespace_as_space<const N: usize>(input: &str) -> [u8; N] {
-    let (output, written) = scan_collapse_whitespace::<N>(input, true, true);
+    collapse_whitespace_with::<N>(input, " ")
+}
+
+pub const fn collapse_whitespace_with_len(input: &str, replacement: &str) -> usize {
+    scan_collapse_whitespace::<0>(input, false, Some(replacement)).1
+}
+
+pub const fn collapse_whitespace_with<const N: usize>(input: &str, replacement: &str) -> [u8; N] {
+    let (output, written) = scan_collapse_whitespace::<N>(input, true, Some(replacement));
     assert!(written == N);
     output
 }

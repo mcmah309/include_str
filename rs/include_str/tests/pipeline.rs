@@ -1,6 +1,44 @@
 use include_str::include_str;
 
 #[test]
+fn custom_whitespace_replacements_are_constant_strings() {
+    const SEPARATOR: &str = "🦀 / ";
+    static TEXT: &str = include_str!(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/message.txt")
+            => collapse_whitespace(SEPARATOR,),
+    );
+    assert_eq!(TEXT, "🦀 / Hello,🦀 / world!🦀 / ");
+    assert_eq!(
+        include_str!("fixtures/message.txt" => collapse_whitespace(" ")),
+        include_str!("fixtures/message.txt" => collapse_whitespace(space))
+    );
+    assert_eq!(
+        include_str!("fixtures/message.txt" => collapse_whitespace("")),
+        "Hello,world!"
+    );
+    assert_eq!(
+        include_str!("fixtures/empty.txt" => collapse_whitespace("x")),
+        ""
+    );
+    assert_eq!(
+        include_str!("fixtures/whitespace.txt" => collapse_whitespace(concat!("my ", "value"))),
+        "my value"
+    );
+    assert_eq!(
+        include_str!("fixtures/message.txt" => trim => collapse_whitespace("-")),
+        "Hello,-world!"
+    );
+    assert_eq!(
+        include_str!("fixtures/message.txt" => collapse_whitespace("-") => trim),
+        "-Hello,-world!-"
+    );
+    assert_eq!(
+        include_str::include_lines!("fixtures/message.txt" => trim => collapse_whitespace("\n")),
+        &["Hello,", "world!"]
+    );
+}
+
+#[test]
 fn operations_compose_left_to_right() {
     const TEXT: &str = include_str!(
         "fixtures/message.txt" =>

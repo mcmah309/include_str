@@ -30,7 +30,8 @@
 /// - `trim`: remove leading and trailing Unicode whitespace.
 /// - `trim_lines`: trim each line, preserving LF/CRLF endings.
 /// - `collapse_whitespace`: collapse runs using newline > tab > space precedence.
-/// - `collapse_whitespace(space)`: collapse each run to one ASCII space.
+/// - `collapse_whitespace(replacement)`: replace each run with a constant string;
+///   `collapse_whitespace(" ")` (or `collapse_whitespace(space)`) uses one ASCII space.
 /// - `replace(from, to)`: replace literal matches; arguments must be constant strings.
 /// - `strip_line_prefix(prefix)`: remove a literal prefix from each matching line.
 /// - `sql`: strip SQL comments and compact unquoted whitespace, like [`include_sql_str!`].
@@ -43,11 +44,14 @@
 /// quoted content. Use `replace(...) => json` to validate after replacement;
 /// `json => replace(...)` can invalidate the JSON. See the named macros for details.
 /// Use [`include_lines!`] separately for a slice of lines instead of text.
+/// Whitespace runs include leading/trailing Unicode whitespace. Custom collapse
+/// replacements are inserted once per run without being processed again; `""`
+/// removes all whitespace.
 ///
 /// ```
 /// const TEXT: &str = include_str::include_str!(
 ///     "../tests/fixtures/message.txt"
-///         => collapse_whitespace(space)
+///         => collapse_whitespace(" ")
 ///         => trim
 ///         => replace("world", "Rust"),
 /// );

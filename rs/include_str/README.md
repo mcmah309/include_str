@@ -32,14 +32,17 @@ text; it does not convert JSON into SQL.
 | `trim` | Remove leading and trailing Unicode whitespace. |
 | `trim_lines` | Trim each line, preserving LF/CRLF endings. |
 | `collapse_whitespace` | Collapse each whitespace run using newline > tab > space precedence. |
-| `collapse_whitespace(space)` | Collapse each whitespace run to one ASCII space. |
+| `collapse_whitespace(replacement)` | Replace each whitespace run with a string, e.g. `" "`, `" / "`, or `""`. |
 | `replace(from, to)` | Replace all non-overlapping literal matches. |
 | `strip_line_prefix(prefix)` | Remove one matching prefix from each line, preserving line endings. |
 | `sql` | Strip SQL comments, compact unquoted whitespace, and trim. |
 | `json` | Validate strict JSON and remove whitespace outside strings. |
 | `jsonc` | Accept comments and trailing commas, producing minified JSON. |
 
-Replacement and prefix arguments must be constant string expressions. Replacement
+Replacement and prefix arguments must be constant string expressions.
+`collapse_whitespace(" ")` also accepts the shorthand `collapse_whitespace(space)`.
+Collapse replaces leading/trailing Unicode whitespace runs too; inserted text
+is not processed again, and `""` removes all whitespace. Replacement
 text is not searched again within the same step; an empty search string inserts
 text at every Unicode character boundary. Prefixes cannot contain CR or LF.
 The pipeline and operation argument lists accept trailing commas.
