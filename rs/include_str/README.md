@@ -10,58 +10,54 @@ include_str = "0.0.1"
 
 ```rust
 const RAW: &str = include_str::include_str!("message.txt");
+const CONFIG: &str = include_str::include_str!(
+    "config.jsonc" => replace("{{name}}", "Rust") => jsonc
+);
 const WORDS: &[&str] = include_str::include_lines!("words.txt");
-const MESSAGE: &str = include_str::include_str!("message.txt" => trim);
-const LINES: &str = include_str::include_str!("message.txt" => trim_lines);
-const COLLAPSED: &str = include_str::include_str!("message.txt" => collapse_whitespace);
-const SPACED: &str = include_str::include_str!("message.txt" => collapse_whitespace(space) => trim);
-const QUERY: &str = include_str::include_str!("query.sql" => sql);
-const CUSTOM: &str = include_str::include_str!("message.txt" => replace("{{name}}", "Rust") => trim);
-const UNQUOTED: &str = include_str::include_str!("message.txt" => strip_line_prefix("> ") => trim_lines);
-const JSON: &str = include_str::include_str!("config.json" => json);
-const JSON_FROM_JSONC: &str = include_str::include_str!("config.jsonc" => jsonc);
 ```
 
-Separate operations with `=>`. They run **left to right**, each processing the
-previous result at compile time. Arguments to `replace(from, to)` and
-`strip_line_prefix(prefix)` must be constant string expressions. The pipeline
-and operation argument lists accept trailing commas.
-`include_str!("file.txt")` includes the original contents without processing.
+Separate operations with `=>`. They run **left to right**, each receiving the
+previous step's text. Reorder or repeat operations as needed; every step must
+accept its input or compilation fails. The result is always a `&'static str`.
+With no operations, the file is included unchanged.
 
-Text operations affect all text, including quoted strings. For example, applying
-`collapse_whitespace(space)` after `json` changes whitespace inside JSON strings.
-Put `json`, `jsonc`, or `sql` last when the transformed text needs validation by
-that operation (SQL processing is lexical, not full SQL syntax validation).
+Order matters: `replace(...) => jsonc` validates and minifies the replaced text;
+`jsonc => replace(...)` replaces text after validation, so the final result may
+no longer be valid JSON. Text operations also affect quoted content. Operations
+process text, not typed values: `jsonc => sql` applies SQL processing to the JSON
+text; it does not convert JSON into SQL.
 
-The named macros provide shorthand for individual operations:
+| Operation | Effect |
+| --- | --- |
+| `trim` | Remove leading and trailing Unicode whitespace. |
+| `trim_lines` | Trim each line, preserving LF/CRLF endings. |
+| `collapse_whitespace` | Collapse each whitespace run using newline > tab > space precedence. |
+| `collapse_whitespace(space)` | Collapse each whitespace run to one ASCII space. |
+| `replace(from, to)` | Replace all non-overlapping literal matches. |
+| `strip_line_prefix(prefix)` | Remove one matching prefix from each line, preserving line endings. |
+| `sql` | Strip SQL comments, compact unquoted whitespace, and trim. |
+| `json` | Validate strict JSON and remove whitespace outside strings. |
+| `jsonc` | Accept comments and trailing commas, producing minified JSON. |
 
-- `include_lines!` returns a `&'static [&'static str]` for lookup tables or word lists. It follows `str::lines()`: LF/CRLF endings are removed, blank lines are kept, and a final line ending adds no extra entry. Empty files produce an empty slice. Whitespace within lines, lone CRs, order, and duplicates are preserved.
-- `include_str_trim!` strips leading and trailing Unicode whitespace, like `str::trim`.
-- `include_str_collapse_whitespace_as_space!` collapses each Unicode whitespace run, including tabs and line endings, to one ASCII space. Leading and trailing runs become one space each.
-- `include_str_collapse_whitespace!` collapses each Unicode whitespace run to one character: newline wins over tab, which wins over space. CR/LF (including CRLF) become `\n`; runs containing a tab become `\t`; all other whitespace becomes an ASCII space. Leading and trailing runs are collapsed too.
-- `include_str_trim_lines!` trims Unicode whitespace from each line, preserving internal whitespace, blank lines, and LF/CRLF line endings (including the final one). A lone carriage return is whitespace, not a line separator.
-- `include_sql_str!` removes SQL comments, collapses unquoted Unicode whitespace to single spaces, and trims the result.
-- `include_str_replace!` accepts one or more search/replacement pairs after the path, e.g. `include_str_replace!("message.txt", "{{name}}", "Rust", "{{year}}", "2026")`. Each pair replaces all non-overlapping literal matches, like `str::replace`. Pairs run in order, including matches in text inserted by earlier pairs. An empty search string inserts the replacement at every Unicode character boundary. Arguments must be constant string expressions.
-- `include_str_strip_line_prefix!` removes one matching literal prefix from each line, preserving other content and LF/CRLF endings. It does not trim indentation. An empty prefix has no effect; prefixes containing CR or LF are rejected.
-- `include_str_json!` validates and minifies JSON at compile time, preserving strings, escapes, numeric spellings, duplicate keys, and key order. It rejects comments, trailing commas, and BOMs, and supports up to 128 nested arrays/objects. Unicode escapes are validated syntactically, without decoding surrogate pairs.
+Replacement and prefix arguments must be constant string expressions. Replacement
+text is not searched again within the same step; an empty search string inserts
+text at every Unicode character boundary. Prefixes cannot contain CR or LF.
+The pipeline and operation argument lists accept trailing commas.
 
-`include_str_jsonc!` converts JSON with `//` line comments, non-nested `/* ... */`
-block comments, and optional trailing commas into minified JSON. Strings and
-numeric spellings are preserved. It uses the same validation and 128-container
-nesting limit as `include_str_json!`; single quotes, unquoted keys, hexadecimal
-numbers, and comments splitting numbers or keywords are rejected. The existing
-`include_str_json!` remains strict JSON.
+JSON operations preserve strings, escapes, numeric spellings, duplicate keys,
+and key order. Nesting is limited to 128 arrays/objects; Unicode escapes are
+checked without decoding surrogate pairs. `jsonc` accepts `//` and non-nested
+`/* ... */` comments and a trailing comma in nonempty arrays/objects, but not
+JSON5 features such as single quotes or unquoted keys.
 
-For SQL, this example:
+SQL processing preserves quoted content and supports nested block comments.
+It is a lexical compactor, not a full SQL parser or dialect converter.
 
-```sql
--- Find active users
-SELECT  id, name
-FROM /* table */ users
-WHERE active = 1;
-```
-
-becomes `SELECT id, name FROM users WHERE active = 1;`.
+Named macros such as `include_str_trim!`, `include_sql_str!`, and
+`include_str_jsonc!` provide shorthand for individual operations; their API docs
+describe detailed behavior. `include_lines!` separately returns a
+`&'static [&'static str]`, following `str::lines()`: LF/CRLF endings are removed,
+blank lines are kept, and a final line ending adds no extra entry.
 
 Paths are relative to the invoking Rust source file. Path expressions such as
 `concat!(env!("CARGO_MANIFEST_DIR"), "/queries/users.sql")` also work.

@@ -7,8 +7,10 @@
 //!
 //! ```
 //! const RAW: &str = include_str::include_str!("../tests/fixtures/message.txt");
-//! const TRIMMED: &str = include_str::include_str!("../tests/fixtures/message.txt" => trim);
-//! assert_eq!(TRIMMED, "Hello, world!");
+//! const TEXT: &str = include_str::include_str!(
+//!     "../tests/fixtures/message.txt" => trim => replace("world", "Rust")
+//! );
+//! assert_eq!(TEXT, "Hello, Rust!");
 //! ```
 //!
 //! This crate is `no_std`, has no dependencies, and performs no runtime allocation
@@ -19,8 +21,8 @@
 /// Include a UTF-8 file and optionally apply text operations at compile time.
 ///
 /// Operations are separated by `=>` and run left to right. With no operations,
-/// this behaves like Rust's
-/// built-in `include_str!`. Paths are relative to the invoking source file;
+/// this behaves like Rust's built-in `include_str!`.
+/// Paths are relative to the invoking source file;
 /// `concat!` and `env!` path expressions are supported, as are trailing commas.
 /// Every result is a `&'static str`, with no runtime processing or allocation.
 ///
@@ -35,9 +37,11 @@
 /// - `json`: validate and minify JSON, like [`include_str_json!`].
 /// - `jsonc`: convert JSONC to minified JSON, like [`include_str_jsonc!`].
 ///
-/// Each operation processes the previous result. Text operations also affect
-/// quoted content; a later operation can change or invalidate SQL/JSON produced
-/// by an earlier one. See the corresponding named macros for detailed semantics.
+/// Operations may be reordered or repeated; each processes the previous text
+/// and must accept it or compilation fails. They do not convert between formats:
+/// `jsonc => sql` applies SQL processing to JSON text. Text operations also affect
+/// quoted content. Use `replace(...) => json` to validate after replacement;
+/// `json => replace(...)` can invalidate the JSON. See the named macros for details.
 /// Use [`include_lines!`] separately for a slice of lines instead of text.
 ///
 /// ```
