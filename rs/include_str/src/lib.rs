@@ -86,6 +86,30 @@ macro_rules! include_str_trim_lines {
     }};
 }
 
+/// Include a UTF-8 file and collapse each whitespace run to one character.
+///
+/// Newline wins over tab, and tab wins over space, regardless of order. CR and
+/// LF (including CRLF) produce `\n`; otherwise a run containing `\t` produces
+/// `\t`, and all remaining Unicode whitespace produces an ASCII space.
+/// Whitespace has the same definition as [`str::trim`]. Leading and trailing
+/// runs are collapsed, not removed; non-whitespace text is preserved.
+/// Accepts the same path expressions as [`include_str!`].
+///
+/// ```
+/// const TEXT: &str = include_str::include_str_collapse_whitespace!("../tests/fixtures/message.txt");
+/// assert_eq!(TEXT, "\tHello, world!\n");
+/// ```
+#[macro_export]
+macro_rules! include_str_collapse_whitespace {
+    ($path:expr $(,)?) => {{
+        const INPUT: &str = $crate::include_str!($path);
+        const LEN: usize = $crate::__private::collapse_whitespace_len(INPUT);
+        const BYTES: [u8; LEN] = $crate::__private::collapse_whitespace::<LEN>(INPUT);
+        const TEXT: &str = $crate::__private::as_str(&BYTES);
+        TEXT
+    }};
+}
+
 /// Include SQL, strip comments, and collapse unquoted whitespace to one space.
 ///
 /// Removes `--` line comments and `/* ... */` block comments (including nested

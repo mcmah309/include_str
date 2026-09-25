@@ -13,6 +13,7 @@ const RAW: &str = include_str::include_str!("message.txt");
 const WORDS: &[&str] = include_str::include_lines!("words.txt");
 const MESSAGE: &str = include_str::include_str_trim!("message.txt");
 const LINES: &str = include_str::include_str_trim_lines!("message.txt");
+const COLLAPSED: &str = include_str::include_str_collapse_whitespace!("message.txt");
 const QUERY: &str = include_str::include_sql_str!("query.sql");
 const CUSTOM: &str = include_str::include_str_replace!("message.txt", "{{name}}", "Rust");
 const UNQUOTED: &str = include_str::include_str_strip_line_prefix!("message.txt", "> ");
@@ -23,6 +24,7 @@ const JSON_FROM_JSONC: &str = include_str::include_str_jsonc!("config.jsonc");
 - `include_str!` is a direct re-export of Rust's built-in macro.
 - `include_lines!` returns a `&'static [&'static str]` for lookup tables or word lists. It follows `str::lines()`: LF/CRLF endings are removed, blank lines are kept, and a final line ending adds no extra entry. Empty files produce an empty slice. Whitespace within lines, lone CRs, order, and duplicates are preserved.
 - `include_str_trim!` strips leading and trailing Unicode whitespace, like `str::trim`.
+- `include_str_collapse_whitespace!` collapses each Unicode whitespace run to one character: newline wins over tab, which wins over space. CR/LF (including CRLF) become `\n`; runs containing a tab become `\t`; all other whitespace becomes an ASCII space. Leading and trailing runs are collapsed too.
 - `include_str_trim_lines!` trims Unicode whitespace from each line, preserving internal whitespace, blank lines, and LF/CRLF line endings (including the final one). A lone carriage return is whitespace, not a line separator.
 - `include_sql_str!` removes SQL comments, collapses unquoted Unicode whitespace to single spaces, and trims the result.
 - `include_str_replace!` accepts one or more search/replacement pairs after the path, e.g. `include_str_replace!("message.txt", "{{name}}", "Rust", "{{year}}", "2026")`. Each pair replaces all non-overlapping literal matches, like `str::replace`. Pairs run in order, including matches in text inserted by earlier pairs. An empty search string inserts the replacement at every Unicode character boundary. Arguments must be constant string expressions.

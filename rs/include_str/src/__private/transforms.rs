@@ -1,4 +1,59 @@
-use super::char_len;
+use super::{char_len, whitespace_len};
+
+const fn scan_collapse_whitespace<const N: usize>(input: &str, emit: bool) -> ([u8; N], usize) {
+    let bytes = input.as_bytes();
+    let mut output = [0; N];
+    let mut written = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        if whitespace_len(bytes, i) > 0 {
+            let mut strongest = 0;
+            while i < bytes.len() {
+                let len = whitespace_len(bytes, i);
+                if len == 0 {
+                    break;
+                }
+                let rank = match bytes[i] {
+                    b'\n' | b'\r' => 2,
+                    b'\t' => 1,
+                    _ => 0,
+                };
+                if rank > strongest {
+                    strongest = rank;
+                }
+                i += len;
+            }
+            if emit {
+                output[written] = match strongest {
+                    2 => b'\n',
+                    1 => b'\t',
+                    _ => b' ',
+                };
+            }
+            written += 1;
+        } else {
+            let end = i + char_len(bytes[i]);
+            while i < end {
+                if emit {
+                    output[written] = bytes[i];
+                }
+                written += 1;
+                i += 1;
+            }
+        }
+    }
+    (output, written)
+}
+
+pub const fn collapse_whitespace_len(input: &str) -> usize {
+    scan_collapse_whitespace::<0>(input, false).1
+}
+
+pub const fn collapse_whitespace<const N: usize>(input: &str) -> [u8; N] {
+    let (output, written) = scan_collapse_whitespace::<N>(input, true);
+    assert!(written == N);
+    output
+}
 
 const fn matches_at(input: &[u8], at: usize, pattern: &[u8]) -> bool {
     if pattern.len() > input.len() - at {
