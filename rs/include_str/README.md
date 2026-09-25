@@ -33,32 +33,6 @@ no longer be valid JSON.
 | `json` | Validate strict JSON and remove whitespace outside strings. |
 | `jsonc` | Accept comments and trailing commas, producing minified JSON. |
 
-Replacement, prefix, and suffix arguments must be constant string expressions.
-Both whitespace operations include leading/trailing Unicode whitespace runs.
-`replace_whitespace` inserts its replacement once per run without processing it
-again; `replace_whitespace("")` removes all whitespace. With `replace`, replacement
-text is not searched again within the same step; an empty search string inserts
-text at every Unicode character boundary. Prefixes and suffixes cannot contain
-CR or LF. Suffixes match just before LF/CRLF or the end of the file, without trimming.
-The pipeline and operation argument lists accept trailing commas.
-
-JSON operations preserve strings, escapes, numeric spellings, duplicate keys,
-and key order. Nesting is limited to 128 arrays/objects; Unicode escapes are
-checked without decoding surrogate pairs. `jsonc` accepts `//` and non-nested
-`/* ... */` comments and a trailing comma in nonempty arrays/objects, but not
-JSON5 features such as single quotes or unquoted keys.
-
-SQL processing preserves quoted content and supports nested block comments.
-It is a lexical compactor, not a full SQL parser or dialect converter.
-
-`include_str!` and `include_lines!` are the two entry points. The `include_str!`
-API docs describe each operation in detail. `include_lines!` accepts the same
-pipeline, processing the whole text **before splitting** into a
-`&'static [&'static str]`. Operations
-do not run independently on each line; use `trim_lines` to trim each line.
-Splitting follows `str::lines()`: LF/CRLF endings are removed, blank lines are
-kept, and a final line ending adds no extra entry.
-
 Paths are relative to the invoking Rust source file. Path expressions such as
 `concat!(env!("CARGO_MANIFEST_DIR"), "/queries/users.sql")` also work.
 Files must exist and contain valid UTF-8. Rust tracks included files so changing
