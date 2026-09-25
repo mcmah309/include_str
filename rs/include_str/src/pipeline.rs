@@ -46,6 +46,9 @@ macro_rules! __include_str_operation {
     ($input:expr; strip_line_prefix($prefix:expr $(,)?)) => {
         $crate::__include_str_operation!(@transform $input; strip_prefix_len, strip_prefix, $prefix)
     };
+    ($input:expr; strip_line_suffix($suffix:expr $(,)?)) => {
+        $crate::__include_str_operation!(@transform $input; strip_suffix_len, strip_suffix, $suffix)
+    };
     (@transform $input:expr; $len:ident, $transform:ident $(, $arg:expr)*) => {
         const {
             const INPUT: &str = $input;
@@ -63,7 +66,7 @@ macro_rules! __include_str_operation {
             "include_str!: unknown operation or invalid arguments: ",
             ::core::stringify!($($invalid)*),
             "; expected trim, trim_lines, collapse_whitespace, collapse_whitespace(replacement), ",
-            "replace(from, to), strip_line_prefix(prefix), sql, json, or jsonc"
+            "replace(from, to), strip_line_prefix(prefix), strip_line_suffix(suffix), sql, json, or jsonc"
         ))
     };
 }

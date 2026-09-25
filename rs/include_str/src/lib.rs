@@ -34,6 +34,7 @@
 ///   `collapse_whitespace(" ")` (or `collapse_whitespace(space)`) uses one ASCII space.
 /// - `replace(from, to)`: replace literal matches; arguments must be constant strings.
 /// - `strip_line_prefix(prefix)`: remove a literal prefix from each matching line.
+/// - `strip_line_suffix(suffix)`: remove a literal suffix from each matching line.
 /// - `sql`: strip SQL comments and compact unquoted whitespace, like [`include_sql_str!`].
 /// - `json`: validate and minify JSON, like [`include_str_json!`].
 /// - `jsonc`: convert JSONC to minified JSON, like [`include_str_jsonc!`].
@@ -261,6 +262,27 @@ macro_rules! include_str_replace {
 macro_rules! include_str_strip_line_prefix {
     ($path:expr, $prefix:expr $(,)?) => {
         $crate::include_str!($path => strip_line_prefix($prefix))
+    };
+}
+
+/// Include a UTF-8 file and remove one literal suffix from each matching line.
+///
+/// Matches immediately before the LF/CRLF ending or the end of the file, without
+/// trimming whitespace. Line endings and nonmatching lines are preserved; a lone
+/// CR is content, not a line separator. An empty suffix has no effect.
+/// The suffix must be a constant string expression and cannot contain CR or LF.
+/// Accepts the same path expressions as [`include_str!`].
+///
+/// ```
+/// const TEXT: &str = include_str::include_str_strip_line_suffix!(
+///     "../tests/fixtures/message.txt", "!",
+/// );
+/// assert_eq!(TEXT, " \tHello, world\r\n");
+/// ```
+#[macro_export]
+macro_rules! include_str_strip_line_suffix {
+    ($path:expr, $suffix:expr $(,)?) => {
+        $crate::include_str!($path => strip_line_suffix($suffix))
     };
 }
 

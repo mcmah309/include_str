@@ -193,3 +193,71 @@ pub const fn strip_prefix<const N: usize>(input: &str, prefix: &str) -> [u8; N] 
     assert!(written == N);
     output
 }
+
+pub(super) const fn scan_strip_suffix<const N: usize>(
+    input: &str,
+    suffix: &str,
+    emit: bool,
+) -> ([u8; N], usize) {
+    let bytes = input.as_bytes();
+    let pattern = suffix.as_bytes();
+    let mut j = 0;
+    while j < pattern.len() {
+        assert!(
+            pattern[j] != b'\r' && pattern[j] != b'\n',
+            "include_str!: strip_line_suffix: suffix must not contain a line ending"
+        );
+        j += 1;
+    }
+    let mut output = [0; N];
+    let mut written = 0;
+    let mut start = 0;
+    while start < bytes.len() {
+        let mut end = start;
+        while end < bytes.len() && bytes[end] != b'\n' {
+            end += 1;
+        }
+        let content_end = if end < bytes.len() && end > start && bytes[end - 1] == b'\r' {
+            end - 1
+        } else {
+            end
+        };
+        let keep_end = if pattern.len() <= content_end - start
+            && matches_at(bytes, content_end - pattern.len(), pattern)
+        {
+            content_end - pattern.len()
+        } else {
+            content_end
+        };
+        let mut i = start;
+        while i < keep_end {
+            if emit {
+                output[written] = bytes[i];
+            }
+            written += 1;
+            i += 1;
+        }
+        // Copy the original LF/CRLF ending after removing at most one suffix.
+        i = content_end;
+        let next = if end < bytes.len() { end + 1 } else { end };
+        while i < next {
+            if emit {
+                output[written] = bytes[i];
+            }
+            written += 1;
+            i += 1;
+        }
+        start = next;
+    }
+    (output, written)
+}
+
+pub const fn strip_suffix_len(input: &str, suffix: &str) -> usize {
+    scan_strip_suffix::<0>(input, suffix, false).1
+}
+
+pub const fn strip_suffix<const N: usize>(input: &str, suffix: &str) -> [u8; N] {
+    let (output, written) = scan_strip_suffix::<N>(input, suffix, true);
+    assert!(written == N);
+    output
+}

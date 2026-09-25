@@ -1,6 +1,36 @@
 use include_str::{include_str_json, include_str_replace, include_str_strip_line_prefix};
 
 #[test]
+fn suffix_removal_works_in_pipelines_and_named_macros() {
+    const SUFFIX: &str = "!";
+    const TEXT: &str = include_str::include_str_strip_line_suffix!(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/message.txt"),
+        SUFFIX,
+    );
+    static STATIC_TEXT: &str = include_str::include_str!(
+        "fixtures/message.txt" => strip_line_suffix(SUFFIX,),
+    );
+    assert_eq!(TEXT, " \tHello, world\r\n");
+    assert_eq!(STATIC_TEXT, TEXT);
+    assert_eq!(
+        include_str::include_lines!("fixtures/message.txt" => trim_lines => strip_line_suffix("!")),
+        &["Hello, world"]
+    );
+    assert_eq!(
+        include_str::include_str!("fixtures/message.txt" => strip_line_suffix("!") => replace("!", "?")),
+        " \tHello, world\r\n"
+    );
+    assert_eq!(
+        include_str::include_str!("fixtures/message.txt" => replace("!", "?") => strip_line_suffix("!")),
+        " \tHello, world?\r\n"
+    );
+    assert_eq!(
+        include_str::include_str_strip_line_suffix!("fixtures/empty.txt", ""),
+        ""
+    );
+}
+
+#[test]
 fn jsonc_converts_files_in_const_and_static_contexts() {
     const JSON: &str = include_str::include_str_jsonc!("fixtures/config.jsonc",);
     static ABSOLUTE: &str = include_str::include_str_jsonc!(concat!(

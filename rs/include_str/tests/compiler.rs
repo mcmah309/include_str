@@ -118,11 +118,12 @@ fn public_macros_reject_missing_files_and_invalid_utf8() {
         "include_str_jsonc",
         "include_str_replace",
         "include_str_strip_line_prefix",
+        "include_str_strip_line_suffix",
     ] {
         for (file, diagnostic) in [("missing.txt", "couldn't read"), ("invalid.txt", "utf-8")] {
             let extra = match name {
                 "include_str_replace" => ", \"a\", \"b\"",
-                "include_str_strip_line_prefix" => ", \"a\"",
+                "include_str_strip_line_prefix" | "include_str_strip_line_suffix" => ", \"a\"",
                 _ => "",
             };
             let output = consumer.compile(&format!(
@@ -324,6 +325,16 @@ fn every_macro_works_in_all_contexts_with_renaming_and_shadowed_names() {
         ("include_str_jsonc", "", "\"é 🦀\""),
         ("include_str_replace", ", FROM, TO", " \t\"Rust 🦀\" \r\n"),
         ("include_str_strip_line_prefix", ", PREFIX", "\"é 🦀\" \r\n"),
+        (
+            "include_str_strip_line_suffix",
+            ", \" \"",
+            " \t\"é 🦀\"\r\n",
+        ),
+        (
+            "include_str",
+            " => strip_line_suffix(\" \")",
+            " \t\"é 🦀\"\r\n",
+        ),
     ];
     let mut source = String::from(
         r#"
@@ -388,6 +399,9 @@ fn every_macro_rejects_invalid_arguments_without_runtime_fallback() {
         }
     }
     for body in [
+        "strings::include_str_strip_line_suffix!(\"input.txt\", runtime)",
+        "strings::include_str!(\"input.txt\" => strip_line_suffix(runtime))",
+        "strings::include_str!(\"input.txt\" => strip_line_suffix(42))",
         "strings::include_str!(\"input.txt\" => collapse_whitespace(runtime))",
         "strings::include_str!(\"input.txt\" => collapse_whitespace(42))",
         "strings::include_str!(\"input.txt\" => collapse_whitespace(b\"x\"))",
@@ -444,6 +458,18 @@ fn pipelines_reject_unknown_operations_and_preserve_validation() {
             "unknown operation or invalid arguments: typo",
         ),
         ("trim()", "unknown operation or invalid arguments: trim"),
+        (
+            "strip_line_suffix()",
+            "unknown operation or invalid arguments",
+        ),
+        (
+            "strip_line_suffix(\"\\n\")",
+            "strip_line_suffix: suffix must not contain a line ending",
+        ),
+        (
+            "strip_line_suffix(\"\\r\") => trim",
+            "strip_line_suffix: suffix must not contain a line ending",
+        ),
         (
             "collapse_whitespace(\"a\", \"b\")",
             "unknown operation or invalid arguments",

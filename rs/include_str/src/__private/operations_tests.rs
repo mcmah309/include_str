@@ -3,6 +3,41 @@ use super::*;
 use std::{format, string::String};
 
 #[test]
+fn suffix_removal_matches_standard_library_on_line_contents() {
+    let atoms = ["a", "é", "🦀", " ", "\r", "\n"];
+    for size in 0..=4 {
+        for mut combination in 0..atoms.len().pow(size) {
+            let mut input = String::new();
+            for _ in 0..size {
+                input.push_str(atoms[combination % atoms.len()]);
+                combination /= atoms.len();
+            }
+            for suffix in ["", "a", "aa", "é", "🦀", " ", "é🦀"] {
+                let expected: String = input
+                    .split_inclusive('\n')
+                    .map(|line| {
+                        let (text, ending) = if let Some(text) = line.strip_suffix("\r\n") {
+                            (text, "\r\n")
+                        } else if let Some(text) = line.strip_suffix('\n') {
+                            (text, "\n")
+                        } else {
+                            (line, "")
+                        };
+                        format!("{}{ending}", text.strip_suffix(suffix).unwrap_or(text))
+                    })
+                    .collect();
+                let (bytes, len) = transforms::scan_strip_suffix::<64>(&input, suffix, true);
+                assert_eq!(len, strip_suffix_len(&input, suffix));
+                assert_eq!(as_str(&bytes[..len]), expected, "{input:?}, {suffix:?}");
+            }
+        }
+    }
+    for suffix in ["\r", "\n", "a\r\nb"] {
+        assert!(std::panic::catch_unwind(|| strip_suffix_len("", suffix)).is_err());
+    }
+}
+
+#[test]
 fn custom_whitespace_collapse_matches_standard_library() {
     let atoms = ["a", "é", "🦀", " ", "\t", "\r\n", "\u{2003}"];
     for size in 0..=4 {
