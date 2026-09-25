@@ -1,5 +1,7 @@
 //! Implementation details for the exported macros; not a supported public API.
 
+pub use core::include_str as raw_include_str;
+
 #[cfg(test)]
 mod tests;
 
@@ -241,7 +243,7 @@ const fn quoted_end(bytes: &[u8], start: usize, close: u8, escape: bool) -> usiz
             i += 1;
         }
     }
-    panic!("include_sql_str!: unterminated quoted string or identifier");
+    panic!("include_str!: sql: unterminated quoted string or identifier");
 }
 
 // Returns zero when the dollar sign does not start a dollar-quoted string.
@@ -277,7 +279,7 @@ const fn dollar_end(bytes: &[u8], start: usize) -> usize {
         }
         i += 1;
     }
-    panic!("include_sql_str!: unterminated dollar-quoted string");
+    panic!("include_str!: sql: unterminated dollar-quoted string");
 }
 
 // A single scanner drives both the sizing and emitting passes so they agree.
@@ -316,7 +318,7 @@ const fn scan<const N: usize>(input: &str, emit: bool) -> ([u8; N], usize) {
                     i += 1;
                 }
             }
-            assert!(depth == 0, "include_sql_str!: unterminated block comment");
+            assert!(depth == 0, "include_str!: sql: unterminated block comment");
             pending_space = true;
             continue;
         }

@@ -35,7 +35,11 @@ fn rejects(input: &str, jsonc: bool) {
             .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
             .unwrap();
         assert!(
-            message.starts_with("include_str_json"),
+            message.starts_with(if jsonc {
+                "include_str!: jsonc:"
+            } else {
+                "include_str!: json:"
+            }),
             "{input:?}: {message}"
         );
     }

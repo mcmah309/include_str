@@ -229,7 +229,7 @@ fn json_and_invalid_prefixes_fail_at_compile_time() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success(), "accepted {input:?}");
         assert!(
-            stderr.contains("E0080") && stderr.contains("include_str_json!:"),
+            stderr.contains("E0080") && stderr.contains("include_str!: json:"),
             "{stderr}"
         );
     }
@@ -286,7 +286,7 @@ fn jsonc_validates_at_compile_time_and_accepts_only_documented_extensions() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success(), "accepted {input:?}");
         assert!(
-            stderr.contains("E0080") && stderr.contains("include_str_json"),
+            stderr.contains("E0080") && stderr.contains("include_str!: jsonc:"),
             "{stderr}"
         );
     }
@@ -307,6 +307,16 @@ fn every_macro_works_in_all_contexts_with_renaming_and_shadowed_names() {
     consumer.write("input with spaces 🦀.txt", " \t\"é 🦀\" \r\n");
     let cases = [
         ("include_str", "", " \t\"é 🦀\" \r\n"),
+        (
+            "include_str",
+            " => trim => replace(FROM, TO)",
+            "\"Rust 🦀\"",
+        ),
+        (
+            "include_str",
+            " => strip_line_prefix(PREFIX) => collapse_whitespace(space) => trim",
+            "\"é 🦀\"",
+        ),
         ("include_str_trim", "", "\"é 🦀\""),
         ("include_str_trim_lines", "", "\"é 🦀\"\r\n"),
         ("include_sql_str", "", "\"é 🦀\""),
@@ -383,11 +393,226 @@ fn every_macro_rejects_invalid_arguments_without_runtime_fallback() {
         "strings::include_str_strip_line_prefix!(\"input.txt\", runtime)",
         "strings::include_str_replace!(\"input.txt\", 42, \"x\")",
         "strings::include_str_strip_line_prefix!(\"input.txt\", b\"x\")",
+        "strings::include_str!(\"input.txt\" => trim => replace(runtime, \"x\"))",
+        "strings::include_str!(\"input.txt\" => replace(\"x\", runtime) => trim)",
+        "strings::include_str!(\"input.txt\" => strip_line_prefix(runtime))",
     ] {
         let output = consumer.compile(&format!(
             "pub fn test(runtime: &str) -> &'static str {{ {body} }}"
         ));
         assert!(!output.status.success(), "accepted {body}");
+    }
+}
+
+#[test]
+fn pipelines_reject_old_and_malformed_separators() {
+    let consumer = Consumer::new();
+    consumer.write("input.txt", "hello");
+    for arguments in [
+        "\"input.txt\", trim",
+        "\"input.txt\", trim, json",
+        "\"input.txt\" => trim, json",
+        "\"input.txt\", trim => json",
+        "\"input.txt\" =>",
+        "\"input.txt\" => trim =>",
+        "\"input.txt\" -> trim",
+        "\"input.txt\" |> trim",
+    ] {
+        let output = consumer.compile(&format!(
+            "pub const TEXT: &str = strings::include_str!({arguments});"
+        ));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "accepted {arguments}");
+        assert!(
+            stderr.contains("expected a path followed by operations separated by =>")
+                || (arguments.contains("|>") && stderr.contains("expected expression")),
+            "{arguments}: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn pipelines_reject_unknown_operations_and_preserve_validation() {
+    let consumer = Consumer::new();
+    consumer.write("input.txt", "/*");
+    for (operations, diagnostic) in [
+        (
+            "trim => typo",
+            "unknown operation or invalid arguments: typo",
+        ),
+        ("trim()", "unknown operation or invalid arguments: trim"),
+        (
+            "collapse_whitespace(tab)",
+            "unknown operation or invalid arguments",
+        ),
+        (
+            "replace(\"a\")",
+            "unknown operation or invalid arguments: replace",
+        ),
+        (
+            "strip_line_prefix()",
+            "unknown operation or invalid arguments",
+        ),
+        ("trim => sql", "unterminated block comment"),
+        ("trim => json", "E0080"),
+        ("trim => jsonc", "E0080"),
+        (
+            "strip_line_prefix(\"\\n\")",
+            "prefix must not contain a line ending",
+        ),
+    ] {
+        let output = consumer.compile(&format!(
+            "pub fn text() -> &'static str {{ strings::include_str!(\"input.txt\" => {operations}) }}"
+        ));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "accepted {operations}");
+        assert!(stderr.contains(diagnostic), "{operations}: {stderr}");
+    }
+}
+
+// This quoted string is valid SQL, JSON and JSONC throughout every combination.
+// Independent string operations provide the expected result for all 81 pairs.
+const PIPELINE_OPERATIONS: [&str; 9] = [
+    "trim",
+    "trim_lines",
+    "collapse_whitespace",
+    "collapse_whitespace(space)",
+    "replace(\"a\", \"aa\")",
+    "strip_line_prefix(\" \")",
+    "sql",
+    "json",
+    "jsonc",
+];
+
+fn reference_pipeline_step(input: &str, operation: usize) -> String {
+    match operation {
+        0 | 6..=8 => input.trim().into(),
+        1 => input
+            .split_inclusive('\n')
+            .map(|line| {
+                let (text, ending) = if let Some(text) = line.strip_suffix("\r\n") {
+                    (text, "\r\n")
+                } else if let Some(text) = line.strip_suffix('\n') {
+                    (text, "\n")
+                } else {
+                    (line, "")
+                };
+                format!("{}{ending}", text.trim())
+            })
+            .collect(),
+        2 | 3 => {
+            let mut output = String::new();
+            let mut chars = input.chars().peekable();
+            while let Some(c) = chars.next() {
+                if !c.is_whitespace() {
+                    output.push(c);
+                    continue;
+                }
+                let mut run = String::from(c);
+                while chars.peek().is_some_and(|c| c.is_whitespace()) {
+                    run.push(chars.next().unwrap());
+                }
+                output.push(if operation == 3 {
+                    ' '
+                } else if run.contains(['\n', '\r']) {
+                    '\n'
+                } else if run.contains('\t') {
+                    '\t'
+                } else {
+                    ' '
+                });
+            }
+            output
+        }
+        4 => input.replace('a', "aa"),
+        5 => input
+            .split_inclusive('\n')
+            .map(|line| line.strip_prefix(' ').unwrap_or(line))
+            .collect(),
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn all_operation_pairs_produce_expected_text_in_a_renamed_no_std_consumer() {
+    let consumer = Consumer::new();
+    let input = " \t\"a  b\" \r\n";
+    consumer.write("input.txt", input);
+    let mut source = String::from(
+        r#"
+        #![no_std]
+        const fn equal(a: &str, b: &str) -> bool {
+            let (a, b) = (a.as_bytes(), b.as_bytes());
+            if a.len() != b.len() { return false; }
+            let mut i = 0;
+            while i < a.len() { if a[i] != b[i] { return false; } i += 1; }
+            true
+        }
+    "#,
+    );
+    for (a, first) in PIPELINE_OPERATIONS.iter().enumerate() {
+        for (b, second) in PIPELINE_OPERATIONS.iter().enumerate() {
+            let expected = reference_pipeline_step(&reference_pipeline_step(input, a), b);
+            source.push_str(&format!(
+                "const _: () = assert!(equal(strings::include_str!(\"input.txt\" => {first} => {second}), {expected:?}));\n"
+            ));
+        }
+    }
+    let output = consumer.compile(&source);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let dependencies = fs::read_to_string(consumer.0.join("consumer.d")).unwrap();
+    assert!(dependencies.contains("input.txt"));
+}
+
+#[test]
+fn validation_errors_identify_the_operation_at_every_pipeline_position() {
+    let consumer = Consumer::new();
+    consumer.write("input.txt", " \t\"a  b\" \r\n");
+    // Make invalid text after any valid operation; the error must name the
+    // validator even when another operation follows it, rather than reporting
+    // an array sizing, UTF-8 or index error from a later stage.
+    let corrupt = "replace(\"\\\"\", \"\") => replace(\"a\", \"/*\")";
+    for operation in PIPELINE_OPERATIONS {
+        for validator in ["sql", "json", "jsonc"] {
+            for pipeline in [
+                format!("{operation} => {corrupt} => {validator}"),
+                format!("{corrupt} => {validator} => {operation}"),
+            ] {
+                let output = consumer.compile(&format!(
+                    "pub fn text() -> &'static str {{ strings::include_str!(\"input.txt\" => {pipeline}) }}"
+                ));
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                assert!(!output.status.success(), "accepted {pipeline}");
+                assert!(
+                    stderr.contains(&format!("include_str!: {validator}:")),
+                    "{pipeline}: {stderr}"
+                );
+                assert!(!stderr.contains("index out of bounds"), "{stderr}");
+            }
+        }
+        for pipeline in [
+            format!("typo => {operation}"),
+            format!("{operation} => typo => trim"),
+            format!("{operation} => typo"),
+            format!("{operation} => strip_line_prefix(\"\\n\")"),
+            format!("strip_line_prefix(\"\\n\") => {operation}"),
+        ] {
+            let output = consumer.compile(&format!(
+                "pub const TEXT: &str = strings::include_str!(\"input.txt\" => {pipeline});"
+            ));
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(!output.status.success(), "accepted {pipeline}");
+            let expected = if pipeline.contains("typo") {
+                "unknown operation or invalid arguments: typo"
+            } else {
+                "include_str!: strip_line_prefix: prefix must not contain a line ending"
+            };
+            assert!(stderr.contains(expected), "{pipeline}: {stderr}");
+        }
     }
 }
 

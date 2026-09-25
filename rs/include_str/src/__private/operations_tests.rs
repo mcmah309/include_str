@@ -211,7 +211,7 @@ fn json_rejects_invalid_grammar_in_both_passes() {
                 .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
                 .unwrap();
             assert!(
-                message.starts_with("include_str_json!:"),
+                message.starts_with("include_str!: json:"),
                 "{input:?}: {message}"
             );
         }
@@ -395,7 +395,7 @@ fn jsonc_rejects_malformed_input_and_never_joins_split_tokens() {
                 .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
                 .unwrap();
             assert!(
-                message.starts_with("include_str_json"),
+                message.starts_with("include_str!: jsonc:"),
                 "{input:?}: {message}"
             );
             assert!(!message.contains("index out of bounds"), "{message}");

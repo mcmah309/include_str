@@ -1,6 +1,25 @@
 //! JSON grammar validation and minification. Strings and numbers are copied
 //! verbatim; no decoding, floating-point conversion, or key reordering occurs.
 
+// Keep the operation name accurate even for grammar errors shared by JSON/JSONC.
+macro_rules! json_error {
+    ($jsonc:expr, $message:literal) => {
+        if $jsonc {
+            panic!(concat!("include_str!: jsonc: ", $message))
+        } else {
+            panic!(concat!("include_str!: json: ", $message))
+        }
+    };
+}
+
+macro_rules! json_assert {
+    ($jsonc:expr, $condition:expr, $message:literal) => {
+        if !$condition {
+            json_error!($jsonc, $message);
+        }
+    };
+}
+
 struct Parser<'a, const N: usize> {
     input: &'a [u8],
     at: usize,
@@ -37,9 +56,10 @@ impl<const N: usize> Parser<'_, N> {
                     {
                         self.at += 1;
                     }
-                    assert!(
+                    json_assert!(
+                        self.jsonc,
                         self.at + 1 < self.input.len(),
-                        "include_str_jsonc!: unterminated block comment"
+                        "unterminated block comment"
                     );
                     self.at += 2;
                 }
@@ -50,9 +70,10 @@ impl<const N: usize> Parser<'_, N> {
 
     // Delay emitting the comma until we know it is not a JSONC trailing comma.
     const fn comma(&mut self, close: u8) -> bool {
-        assert!(
+        json_assert!(
+            self.jsonc,
             self.peek() == b',',
-            "include_str_json!: expected comma or closing delimiter"
+            "expected comma or closing delimiter"
         );
         self.at += 1;
         if self.jsonc {
@@ -69,9 +90,10 @@ impl<const N: usize> Parser<'_, N> {
     }
 
     const fn peek(&self) -> u8 {
-        assert!(
+        json_assert!(
+            self.jsonc,
             self.at < self.input.len(),
-            "include_str_json!: unexpected end of JSON"
+            "unexpected end of JSON"
         );
         self.input[self.at]
     }
@@ -87,17 +109,19 @@ impl<const N: usize> Parser<'_, N> {
     }
 
     const fn punctuation(&mut self, expected: u8) {
-        assert!(
+        json_assert!(
+            self.jsonc,
             self.peek() == expected,
-            "include_str_json!: unexpected JSON punctuation"
+            "unexpected JSON punctuation"
         );
         self.copy_to(self.at + 1);
     }
 
     const fn string(&mut self) {
-        assert!(
+        json_assert!(
+            self.jsonc,
             self.peek() == b'"',
-            "include_str_json!: object keys must be strings"
+            "object keys must be strings"
         );
         let mut i = self.at + 1;
         while i < self.input.len() {
@@ -106,43 +130,43 @@ impl<const N: usize> Parser<'_, N> {
                 self.copy_to(i + 1);
                 return;
             }
-            assert!(
+            json_assert!(
+                self.jsonc,
                 byte >= 0x20,
-                "include_str_json!: unescaped control character in string"
+                "unescaped control character in string"
             );
             if byte == b'\\' {
                 i += 1;
-                assert!(
-                    i < self.input.len(),
-                    "include_str_json!: incomplete string escape"
-                );
+                json_assert!(self.jsonc, i < self.input.len(), "incomplete string escape");
                 match self.input[i] {
                     b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't' => {}
                     b'u' => {
                         let mut digit = 0;
                         while digit < 4 {
                             i += 1;
-                            assert!(
+                            json_assert!(
+                                self.jsonc,
                                 i < self.input.len() && self.input[i].is_ascii_hexdigit(),
-                                "include_str_json!: invalid Unicode escape"
+                                "invalid Unicode escape"
                             );
                             digit += 1;
                         }
                     }
-                    _ => panic!("include_str_json!: invalid string escape"),
+                    _ => json_error!(self.jsonc, "invalid string escape"),
                 }
             }
             i += 1;
         }
-        panic!("include_str_json!: unterminated JSON string");
+        json_error!(self.jsonc, "unterminated JSON string");
     }
 
     const fn literal(&mut self, literal: &[u8]) {
         let mut i = 0;
         while i < literal.len() {
-            assert!(
+            json_assert!(
+                self.jsonc,
                 self.at + i < self.input.len() && self.input[self.at + i] == literal[i],
-                "include_str_json!: invalid JSON literal"
+                "invalid JSON literal"
             );
             i += 1;
         }
@@ -154,9 +178,10 @@ impl<const N: usize> Parser<'_, N> {
         if self.input[i] == b'-' {
             i += 1;
         }
-        assert!(
+        json_assert!(
+            self.jsonc,
             i < self.input.len() && self.input[i].is_ascii_digit(),
-            "include_str_json!: invalid JSON number"
+            "invalid JSON number"
         );
         if self.input[i] == b'0' {
             i += 1;
@@ -171,7 +196,7 @@ impl<const N: usize> Parser<'_, N> {
             while i < self.input.len() && self.input[i].is_ascii_digit() {
                 i += 1;
             }
-            assert!(i > start, "include_str_json!: missing fractional digits");
+            json_assert!(self.jsonc, i > start, "missing fractional digits");
         }
         if i < self.input.len() && matches!(self.input[i], b'e' | b'E') {
             i += 1;
@@ -182,7 +207,7 @@ impl<const N: usize> Parser<'_, N> {
             while i < self.input.len() && self.input[i].is_ascii_digit() {
                 i += 1;
             }
-            assert!(i > start, "include_str_json!: missing exponent digits");
+            json_assert!(self.jsonc, i > start, "missing exponent digits");
         }
         self.copy_to(i);
     }
@@ -205,9 +230,10 @@ const fn scan<const N: usize>(input: &str, emit: bool, jsonc: bool) -> ([u8; N],
         parser.whitespace();
         match states[depth] {
             1 => {
-                assert!(
+                json_assert!(
+                    parser.jsonc,
                     parser.at == parser.input.len(),
-                    "include_str_json!: trailing content after JSON value"
+                    "trailing content after JSON value"
                 );
                 return (parser.output, parser.written);
             }
@@ -265,15 +291,12 @@ const fn scan<const N: usize>(input: &str, emit: bool, jsonc: bool) -> ([u8; N],
             0 => 1,
             2 | 3 => 4,
             8 => 9,
-            _ => panic!("include_str_json!: invalid parser state"),
+            _ => json_error!(parser.jsonc, "invalid parser state"),
         };
         match parser.peek() {
             b'[' | b'{' => {
                 let open = parser.peek();
-                assert!(
-                    depth < 128,
-                    "include_str_json!: nesting exceeds 128 containers"
-                );
+                json_assert!(parser.jsonc, depth < 128, "nesting exceeds 128 containers");
                 parser.punctuation(open);
                 depth += 1;
                 states[depth] = if open == b'[' { 2 } else { 5 };
@@ -283,7 +306,7 @@ const fn scan<const N: usize>(input: &str, emit: bool, jsonc: bool) -> ([u8; N],
             b'f' => parser.literal(b"false"),
             b'n' => parser.literal(b"null"),
             b'-' | b'0'..=b'9' => parser.number(),
-            _ => panic!("include_str_json!: expected JSON value"),
+            _ => json_error!(parser.jsonc, "expected JSON value"),
         }
     }
 }

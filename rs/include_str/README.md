@@ -11,18 +11,30 @@ include_str = "0.0.1"
 ```rust
 const RAW: &str = include_str::include_str!("message.txt");
 const WORDS: &[&str] = include_str::include_lines!("words.txt");
-const MESSAGE: &str = include_str::include_str_trim!("message.txt");
-const LINES: &str = include_str::include_str_trim_lines!("message.txt");
-const COLLAPSED: &str = include_str::include_str_collapse_whitespace!("message.txt");
-const SPACED: &str = include_str::include_str_collapse_whitespace_as_space!("message.txt");
-const QUERY: &str = include_str::include_sql_str!("query.sql");
-const CUSTOM: &str = include_str::include_str_replace!("message.txt", "{{name}}", "Rust");
-const UNQUOTED: &str = include_str::include_str_strip_line_prefix!("message.txt", "> ");
-const JSON: &str = include_str::include_str_json!("config.json");
-const JSON_FROM_JSONC: &str = include_str::include_str_jsonc!("config.jsonc");
+const MESSAGE: &str = include_str::include_str!("message.txt" => trim);
+const LINES: &str = include_str::include_str!("message.txt" => trim_lines);
+const COLLAPSED: &str = include_str::include_str!("message.txt" => collapse_whitespace);
+const SPACED: &str = include_str::include_str!("message.txt" => collapse_whitespace(space) => trim);
+const QUERY: &str = include_str::include_str!("query.sql" => sql);
+const CUSTOM: &str = include_str::include_str!("message.txt" => replace("{{name}}", "Rust") => trim);
+const UNQUOTED: &str = include_str::include_str!("message.txt" => strip_line_prefix("> ") => trim_lines);
+const JSON: &str = include_str::include_str!("config.json" => json);
+const JSON_FROM_JSONC: &str = include_str::include_str!("config.jsonc" => jsonc);
 ```
 
-- `include_str!` is a direct re-export of Rust's built-in macro.
+Separate operations with `=>`. They run **left to right**, each processing the
+previous result at compile time. Arguments to `replace(from, to)` and
+`strip_line_prefix(prefix)` must be constant string expressions. The pipeline
+and operation argument lists accept trailing commas.
+`include_str!("file.txt")` includes the original contents without processing.
+
+Text operations affect all text, including quoted strings. For example, applying
+`collapse_whitespace(space)` after `json` changes whitespace inside JSON strings.
+Put `json`, `jsonc`, or `sql` last when the transformed text needs validation by
+that operation (SQL processing is lexical, not full SQL syntax validation).
+
+The named macros provide shorthand for individual operations:
+
 - `include_lines!` returns a `&'static [&'static str]` for lookup tables or word lists. It follows `str::lines()`: LF/CRLF endings are removed, blank lines are kept, and a final line ending adds no extra entry. Empty files produce an empty slice. Whitespace within lines, lone CRs, order, and duplicates are preserved.
 - `include_str_trim!` strips leading and trailing Unicode whitespace, like `str::trim`.
 - `include_str_collapse_whitespace_as_space!` collapses each Unicode whitespace run, including tabs and line endings, to one ASCII space. Leading and trailing runs become one space each.

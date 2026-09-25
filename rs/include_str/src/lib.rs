@@ -7,7 +7,7 @@
 //!
 //! ```
 //! const RAW: &str = include_str::include_str!("../tests/fixtures/message.txt");
-//! const TRIMMED: &str = include_str::include_str_trim!("../tests/fixtures/message.txt");
+//! const TRIMMED: &str = include_str::include_str!("../tests/fixtures/message.txt" => trim);
 //! assert_eq!(TRIMMED, "Hello, world!");
 //! ```
 //!
@@ -16,8 +16,56 @@
 
 #![no_std]
 
-/// Rust's built-in macro, re-exported without changing its behavior.
-pub use core::include_str;
+/// Include a UTF-8 file and optionally apply text operations at compile time.
+///
+/// Operations are separated by `=>` and run left to right. With no operations,
+/// this behaves like Rust's
+/// built-in `include_str!`. Paths are relative to the invoking source file;
+/// `concat!` and `env!` path expressions are supported, as are trailing commas.
+/// Every result is a `&'static str`, with no runtime processing or allocation.
+///
+/// Supported operations:
+/// - `trim`: remove leading and trailing Unicode whitespace.
+/// - `trim_lines`: trim each line, preserving LF/CRLF endings.
+/// - `collapse_whitespace`: collapse runs using newline > tab > space precedence.
+/// - `collapse_whitespace(space)`: collapse each run to one ASCII space.
+/// - `replace(from, to)`: replace literal matches; arguments must be constant strings.
+/// - `strip_line_prefix(prefix)`: remove a literal prefix from each matching line.
+/// - `sql`: strip SQL comments and compact unquoted whitespace, like [`include_sql_str!`].
+/// - `json`: validate and minify JSON, like [`include_str_json!`].
+/// - `jsonc`: convert JSONC to minified JSON, like [`include_str_jsonc!`].
+///
+/// Each operation processes the previous result. Text operations also affect
+/// quoted content; a later operation can change or invalidate SQL/JSON produced
+/// by an earlier one. See the corresponding named macros for detailed semantics.
+/// Use [`include_lines!`] separately for a slice of lines instead of text.
+///
+/// ```
+/// const TEXT: &str = include_str::include_str!(
+///     "../tests/fixtures/message.txt"
+///         => collapse_whitespace(space)
+///         => trim
+///         => replace("world", "Rust"),
+/// );
+/// assert_eq!(TEXT, "Hello, Rust!");
+/// ```
+#[macro_export]
+macro_rules! include_str {
+    ($path:expr $(,)?) => {
+        $crate::__private::raw_include_str!($path)
+    };
+    ($path:expr $(=> $op:ident $(($($args:tt)*))?)+ $(,)?) => {
+        $crate::__include_str_pipeline!(
+            $crate::__private::raw_include_str!($path);
+            $($op $(($($args)*))?),+
+        )
+    };
+    ($($invalid:tt)*) => {
+        ::core::compile_error!("include_str!: expected a path followed by operations separated by =>")
+    };
+}
+
+mod pipeline;
 
 /// Include a UTF-8 file as a static slice of lines for lookup tables or word lists.
 ///
@@ -55,13 +103,9 @@ macro_rules! include_lines {
 /// `concat!` and `env!`.
 #[macro_export]
 macro_rules! include_str_trim {
-    ($path:expr $(,)?) => {{
-        const INPUT: &str = $crate::include_str!($path);
-        const LEN: usize = $crate::__private::trim_len(INPUT);
-        const BYTES: [u8; LEN] = $crate::__private::trim::<LEN>(INPUT);
-        const TEXT: &str = $crate::__private::as_str(&BYTES);
-        TEXT
-    }};
+    ($path:expr $(,)?) => {
+        $crate::include_str!($path => trim)
+    };
 }
 
 /// Include a UTF-8 file and trim Unicode whitespace from each line.
@@ -77,13 +121,9 @@ macro_rules! include_str_trim {
 /// ```
 #[macro_export]
 macro_rules! include_str_trim_lines {
-    ($path:expr $(,)?) => {{
-        const INPUT: &str = $crate::include_str!($path);
-        const LEN: usize = $crate::__private::trim_lines_len(INPUT);
-        const BYTES: [u8; LEN] = $crate::__private::trim_lines::<LEN>(INPUT);
-        const TEXT: &str = $crate::__private::as_str(&BYTES);
-        TEXT
-    }};
+    ($path:expr $(,)?) => {
+        $crate::include_str!($path => trim_lines)
+    };
 }
 
 /// Include a UTF-8 file and collapse each whitespace run to one character.
@@ -101,13 +141,9 @@ macro_rules! include_str_trim_lines {
 /// ```
 #[macro_export]
 macro_rules! include_str_collapse_whitespace {
-    ($path:expr $(,)?) => {{
-        const INPUT: &str = $crate::include_str!($path);
-        const LEN: usize = $crate::__private::collapse_whitespace_len(INPUT);
-        const BYTES: [u8; LEN] = $crate::__private::collapse_whitespace::<LEN>(INPUT);
-        const TEXT: &str = $crate::__private::as_str(&BYTES);
-        TEXT
-    }};
+    ($path:expr $(,)?) => {
+        $crate::include_str!($path => collapse_whitespace)
+    };
 }
 
 /// Include a UTF-8 file and collapse each Unicode whitespace run to one ASCII space.
@@ -122,13 +158,9 @@ macro_rules! include_str_collapse_whitespace {
 /// ```
 #[macro_export]
 macro_rules! include_str_collapse_whitespace_as_space {
-    ($path:expr $(,)?) => {{
-        const INPUT: &str = $crate::include_str!($path);
-        const LEN: usize = $crate::__private::collapse_whitespace_len(INPUT);
-        const BYTES: [u8; LEN] = $crate::__private::collapse_whitespace_as_space::<LEN>(INPUT);
-        const TEXT: &str = $crate::__private::as_str(&BYTES);
-        TEXT
-    }};
+    ($path:expr $(,)?) => {
+        $crate::include_str!($path => collapse_whitespace(space))
+    };
 }
 
 /// Include SQL, strip comments, and collapse unquoted whitespace to one space.
@@ -163,13 +195,9 @@ macro_rules! include_str_collapse_whitespace_as_space {
 /// ```
 #[macro_export]
 macro_rules! include_sql_str {
-    ($path:expr $(,)?) => {{
-        const INPUT: &str = $crate::include_str!($path);
-        const LEN: usize = $crate::__private::sql_len(INPUT);
-        const BYTES: [u8; LEN] = $crate::__private::sql::<LEN>(INPUT);
-        const TEXT: &str = $crate::__private::as_str(&BYTES);
-        TEXT
-    }};
+    ($path:expr $(,)?) => {
+        $crate::include_str!($path => sql)
+    };
 }
 
 /// Include a UTF-8 file and replace every non-overlapping literal occurrence.
@@ -196,21 +224,8 @@ macro_rules! include_sql_str {
 /// ```
 #[macro_export]
 macro_rules! include_str_replace {
-    (@apply $input:expr;) => { $input };
-    (@apply $input:expr; $from:expr, $to:expr $(, $next_from:expr, $next_to:expr)*) => {
-        $crate::include_str_replace!(@apply const {
-            const INPUT: &str = $input;
-            $crate::__private::as_str(
-                &const {
-                    $crate::__private::replace::<
-                        { $crate::__private::replace_len(INPUT, $from, $to) },
-                    >(INPUT, $from, $to)
-                },
-            )
-        }; $($next_from, $next_to),*)
-    };
     ($path:expr, $($from:expr, $to:expr),+ $(,)?) => {
-        $crate::include_str_replace!(@apply $crate::include_str!($path); $($from, $to),+)
+        $crate::include_str!($path $(=> replace($from, $to))+)
     };
 }
 
@@ -230,20 +245,7 @@ macro_rules! include_str_replace {
 #[macro_export]
 macro_rules! include_str_strip_line_prefix {
     ($path:expr, $prefix:expr $(,)?) => {
-        const {
-            $crate::__private::as_str(
-                &const {
-                    $crate::__private::strip_prefix::<
-                        {
-                            $crate::__private::strip_prefix_len(
-                                $crate::include_str!($path),
-                                $prefix,
-                            )
-                        },
-                    >($crate::include_str!($path), $prefix)
-                },
-            )
-        }
+        $crate::include_str!($path => strip_line_prefix($prefix))
     };
 }
 
@@ -264,13 +266,9 @@ macro_rules! include_str_strip_line_prefix {
 /// ```
 #[macro_export]
 macro_rules! include_str_json {
-    ($path:expr $(,)?) => {{
-        const INPUT: &str = $crate::include_str!($path);
-        const LEN: usize = $crate::__private::json_len(INPUT);
-        const BYTES: [u8; LEN] = $crate::__private::json::<LEN>(INPUT);
-        const TEXT: &str = $crate::__private::as_str(&BYTES);
-        TEXT
-    }};
+    ($path:expr $(,)?) => {
+        $crate::include_str!($path => json)
+    };
 }
 
 /// Include UTF-8 JSONC and convert it to minified, valid JSON at compile time.
@@ -291,13 +289,9 @@ macro_rules! include_str_json {
 /// ```
 #[macro_export]
 macro_rules! include_str_jsonc {
-    ($path:expr $(,)?) => {{
-        const INPUT: &str = $crate::include_str!($path);
-        const LEN: usize = $crate::__private::jsonc_len(INPUT);
-        const BYTES: [u8; LEN] = $crate::__private::jsonc::<LEN>(INPUT);
-        const TEXT: &str = $crate::__private::as_str(&BYTES);
-        TEXT
-    }};
+    ($path:expr $(,)?) => {
+        $crate::include_str!($path => jsonc)
+    };
 }
 
 // Public only so exported macros can use these functions in downstream crates.
