@@ -5,35 +5,35 @@ fn custom_whitespace_replacements_are_constant_strings() {
     const SEPARATOR: &str = "🦀 / ";
     static TEXT: &str = include_str!(
         concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/message.txt")
-            => collapse_whitespace(SEPARATOR,),
+            => replace_whitespace(SEPARATOR,),
     );
     assert_eq!(TEXT, "🦀 / Hello,🦀 / world!🦀 / ");
     assert_eq!(
-        include_str!("fixtures/message.txt" => collapse_whitespace(" ")),
-        include_str!("fixtures/message.txt" => collapse_whitespace(space))
+        include_str!("fixtures/message.txt" => replace_whitespace(" ")),
+        " Hello, world! "
     );
     assert_eq!(
-        include_str!("fixtures/message.txt" => collapse_whitespace("")),
+        include_str!("fixtures/message.txt" => replace_whitespace("")),
         "Hello,world!"
     );
     assert_eq!(
-        include_str!("fixtures/empty.txt" => collapse_whitespace("x")),
+        include_str!("fixtures/empty.txt" => replace_whitespace("x")),
         ""
     );
     assert_eq!(
-        include_str!("fixtures/whitespace.txt" => collapse_whitespace(concat!("my ", "value"))),
+        include_str!("fixtures/whitespace.txt" => replace_whitespace(concat!("my ", "value"))),
         "my value"
     );
     assert_eq!(
-        include_str!("fixtures/message.txt" => trim => collapse_whitespace("-")),
+        include_str!("fixtures/message.txt" => trim => replace_whitespace("-")),
         "Hello,-world!"
     );
     assert_eq!(
-        include_str!("fixtures/message.txt" => collapse_whitespace("-") => trim),
+        include_str!("fixtures/message.txt" => replace_whitespace("-") => trim),
         "-Hello,-world!-"
     );
     assert_eq!(
-        include_str::include_lines!("fixtures/message.txt" => trim => collapse_whitespace("\n")),
+        include_str::include_lines!("fixtures/message.txt" => trim => replace_whitespace("\n")),
         &["Hello,", "world!"]
     );
 }
@@ -42,7 +42,7 @@ fn custom_whitespace_replacements_are_constant_strings() {
 fn operations_compose_left_to_right() {
     const TEXT: &str = include_str!(
         "fixtures/message.txt" =>
-        collapse_whitespace(space) =>
+        replace_whitespace(" ") =>
         trim =>
         replace("world", "Rust"),
     );
@@ -88,7 +88,7 @@ fn supports_constant_arguments_paths_and_empty_results() {
     );
     assert_eq!(TEXT, "Hello, Rust!");
     assert_eq!(
-        include_str!("fixtures/empty.txt" => trim => collapse_whitespace(space)),
+        include_str!("fixtures/empty.txt" => trim => replace_whitespace(" ")),
         ""
     );
     assert_eq!(

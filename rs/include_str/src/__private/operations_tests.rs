@@ -65,7 +65,7 @@ fn custom_whitespace_collapse_matches_standard_library() {
                 };
                 let (bytes, len) =
                     transforms::scan_collapse_whitespace::<128>(&input, true, Some(replacement));
-                assert_eq!(len, collapse_whitespace_with_len(&input, replacement));
+                assert_eq!(len, replace_whitespace_len(&input, replacement));
                 assert_eq!(
                     as_str(&bytes[..len]),
                     expected,

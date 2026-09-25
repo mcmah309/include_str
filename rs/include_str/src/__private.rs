@@ -15,9 +15,8 @@ mod json;
 mod transforms;
 pub use json::{json, json_len, jsonc, jsonc_len};
 pub use transforms::{
-    collapse_whitespace, collapse_whitespace_as_space, collapse_whitespace_len,
-    collapse_whitespace_with, collapse_whitespace_with_len, replace, replace_len, strip_prefix,
-    strip_prefix_len, strip_suffix, strip_suffix_len,
+    collapse_whitespace, collapse_whitespace_len, replace, replace_len, replace_whitespace,
+    replace_whitespace_len, strip_prefix, strip_prefix_len, strip_suffix, strip_suffix_len,
 };
 
 pub const fn as_str(bytes: &[u8]) -> &str {

@@ -3,11 +3,6 @@
 Include UTF-8 files as static strings, with optional compile-time preprocessing.
 No dependencies, no allocation, no runtime processing, and compatible with `no_std`.
 
-```toml
-[dependencies]
-include_str = "0.0.1"
-```
-
 ```rust
 const RAW: &str = include_str::include_str!("message.txt");
 const CONFIG: &str = include_str::include_str!(
@@ -23,16 +18,14 @@ With no operations, the file is included unchanged.
 
 Order matters: `replace(...) => jsonc` validates and minifies the replaced text;
 `jsonc => replace(...)` replaces text after validation, so the final result may
-no longer be valid JSON. Text operations also affect quoted content. Operations
-process text, not typed values: `jsonc => sql` applies SQL processing to the JSON
-text; it does not convert JSON into SQL.
+no longer be valid JSON.
 
 | Operation | Effect |
 | --- | --- |
 | `trim` | Remove leading and trailing Unicode whitespace. |
 | `trim_lines` | Trim each line, preserving LF/CRLF endings. |
 | `collapse_whitespace` | Collapse each whitespace run using newline > tab > space precedence. |
-| `collapse_whitespace(replacement)` | Replace each whitespace run with a string, e.g. `" "`, `" / "`, or `""`. |
+| `replace_whitespace(replacement)` | Replace each whitespace run with a string, e.g. `" "`, `" / "`, or `""`. |
 | `replace(from, to)` | Replace all non-overlapping literal matches. |
 | `strip_line_prefix(prefix)` | Remove one matching prefix from each line, preserving line endings. |
 | `strip_line_suffix(suffix)` | Remove one matching suffix from each line, preserving line endings. |
@@ -41,9 +34,9 @@ text; it does not convert JSON into SQL.
 | `jsonc` | Accept comments and trailing commas, producing minified JSON. |
 
 Replacement, prefix, and suffix arguments must be constant string expressions.
-`collapse_whitespace(" ")` also accepts the shorthand `collapse_whitespace(space)`.
-Collapse replaces leading/trailing Unicode whitespace runs too; inserted text
-is not processed again, and `""` removes all whitespace. Replacement
+Both whitespace operations include leading/trailing Unicode whitespace runs.
+`replace_whitespace` inserts its replacement once per run without processing it
+again; `replace_whitespace("")` removes all whitespace. With `replace`, replacement
 text is not searched again within the same step; an empty search string inserts
 text at every Unicode character boundary. Prefixes and suffixes cannot contain
 CR or LF. Suffixes match just before LF/CRLF or the end of the file, without trimming.

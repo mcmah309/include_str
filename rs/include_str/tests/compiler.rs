@@ -300,7 +300,7 @@ fn every_macro_works_in_all_contexts_with_renaming_and_shadowed_names() {
         ),
         (
             "include_str",
-            " => strip_line_prefix(PREFIX) => collapse_whitespace(space) => trim",
+            " => strip_line_prefix(PREFIX) => replace_whitespace(\" \") => trim",
             "\"é 🦀\"",
         ),
         ("include_str", " => trim", "\"é 🦀\""),
@@ -384,9 +384,9 @@ fn every_macro_rejects_invalid_arguments_without_runtime_fallback() {
     for body in [
         "strings::include_str!(\"input.txt\" => strip_line_suffix(runtime))",
         "strings::include_str!(\"input.txt\" => strip_line_suffix(42))",
-        "strings::include_str!(\"input.txt\" => collapse_whitespace(runtime))",
-        "strings::include_str!(\"input.txt\" => collapse_whitespace(42))",
-        "strings::include_str!(\"input.txt\" => collapse_whitespace(b\"x\"))",
+        "strings::include_str!(\"input.txt\" => replace_whitespace(runtime))",
+        "strings::include_str!(\"input.txt\" => replace_whitespace(42))",
+        "strings::include_str!(\"input.txt\" => replace_whitespace(b\"x\"))",
         "strings::include_str!(\"input.txt\" => replace(runtime, \"x\"))",
         "strings::include_str!(\"input.txt\" => replace(\"x\", runtime))",
         "strings::include_str!(\"input.txt\" => strip_line_prefix(runtime))",
@@ -440,6 +440,19 @@ fn pipelines_reject_unknown_operations_and_preserve_validation() {
         ),
         ("trim()", "unknown operation or invalid arguments: trim"),
         (
+            "collapse_whitespace(\" \")",
+            "unknown operation or invalid arguments",
+        ),
+        (
+            "replace_whitespace",
+            "unknown operation or invalid arguments",
+        ),
+        (
+            "replace_whitespace()",
+            "unknown operation or invalid arguments",
+        ),
+        ("replace_whitespace(space)", "cannot find value `space`"),
+        (
             "strip_line_suffix()",
             "unknown operation or invalid arguments",
         ),
@@ -452,7 +465,7 @@ fn pipelines_reject_unknown_operations_and_preserve_validation() {
             "strip_line_suffix: suffix must not contain a line ending",
         ),
         (
-            "collapse_whitespace(\"a\", \"b\")",
+            "replace_whitespace(\"a\", \"b\")",
             "unknown operation or invalid arguments",
         ),
         (
@@ -486,7 +499,7 @@ const PIPELINE_OPERATIONS: [&str; 9] = [
     "trim",
     "trim_lines",
     "collapse_whitespace",
-    "collapse_whitespace(space)",
+    "replace_whitespace(\" \")",
     "replace(\"a\", \"aa\")",
     "strip_line_prefix(\" \")",
     "sql",

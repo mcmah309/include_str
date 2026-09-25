@@ -70,15 +70,11 @@ pub const fn collapse_whitespace<const N: usize>(input: &str) -> [u8; N] {
     output
 }
 
-pub const fn collapse_whitespace_as_space<const N: usize>(input: &str) -> [u8; N] {
-    collapse_whitespace_with::<N>(input, " ")
-}
-
-pub const fn collapse_whitespace_with_len(input: &str, replacement: &str) -> usize {
+pub const fn replace_whitespace_len(input: &str, replacement: &str) -> usize {
     scan_collapse_whitespace::<0>(input, false, Some(replacement)).1
 }
 
-pub const fn collapse_whitespace_with<const N: usize>(input: &str, replacement: &str) -> [u8; N] {
+pub const fn replace_whitespace<const N: usize>(input: &str, replacement: &str) -> [u8; N] {
     let (output, written) = scan_collapse_whitespace::<N>(input, true, Some(replacement));
     assert!(written == N);
     output

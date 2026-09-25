@@ -30,8 +30,8 @@
 /// - `trim`: remove leading and trailing Unicode whitespace.
 /// - `trim_lines`: trim each line, preserving LF/CRLF endings.
 /// - `collapse_whitespace`: collapse runs using newline > tab > space precedence.
-/// - `collapse_whitespace(replacement)`: replace each run with a constant string;
-///   `collapse_whitespace(" ")` (or `collapse_whitespace(space)`) uses one ASCII space.
+/// - `replace_whitespace(replacement)`: replace each run with a constant string;
+///   `replace_whitespace(" ")` uses one ASCII space.
 /// - `replace(from, to)`: replace literal matches; arguments must be constant strings.
 /// - `strip_line_prefix(prefix)`: remove a literal prefix from each matching line.
 /// - `strip_line_suffix(suffix)`: remove a literal suffix from each matching line.
@@ -45,14 +45,14 @@
 /// quoted content. Use `replace(...) => json` to validate after replacement;
 /// `json => replace(...)` can invalidate the JSON. See the operation details below.
 /// Use [`include_lines!`] separately for a slice of lines instead of text.
-/// Whitespace runs include leading/trailing Unicode whitespace. Custom collapse
+/// Whitespace runs include leading/trailing Unicode whitespace. Whitespace
 /// replacements are inserted once per run without being processed again; `""`
 /// removes all whitespace.
 ///
 /// ```
 /// const TEXT: &str = include_str::include_str!(
 ///     "../tests/fixtures/message.txt"
-///         => collapse_whitespace(" ")
+///         => replace_whitespace(" ")
 ///         => trim
 ///         => replace("world", "Rust"),
 /// );
@@ -84,13 +84,13 @@
 /// Whitespace has the same definition as [`str::trim`]. Leading and trailing
 /// runs are collapsed, not removed; non-whitespace text is preserved.
 ///
-/// ## `collapse_whitespace(replacement)`
+/// ## `replace_whitespace(replacement)`
 ///
 /// Replace each Unicode whitespace run with a constant string.
 ///
 /// Includes tabs, line endings, and leading/trailing runs. Non-whitespace text
 /// is preserved; inserted text is not processed again. `""` removes whitespace,
-/// and `" "` (also written `space`) replaces each run with one ASCII space.
+/// and `" "` replaces each run with one ASCII space.
 ///
 /// ## `sql`
 ///
@@ -110,9 +110,9 @@
 /// It does not support MySQL `#` comments or implicit backslash escapes in plain
 /// strings. All block comments are removed, including optimizer hints and MySQL
 /// executable comments. SQL that depends on comments or significant unquoted
-/// newlines (such as PostgreSQL newline-separated adjacent literals) should use
-/// [`include_str!`] instead. Brackets are always treated as quoted identifiers,
-/// so use the raw macro for dialects that use brackets for array expressions.
+/// newlines (such as PostgreSQL newline-separated adjacent literals) should omit
+/// the `sql` operation. Brackets are always treated as quoted identifiers,
+/// so omit `sql` for dialects that use brackets for array expressions.
 ///
 /// Malformed SQL fails during constant evaluation.
 ///

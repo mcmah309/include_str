@@ -7,12 +7,3 @@ rust-version = "1.85"
 readme = "README.md"
 repository = "https://github.com/mcmah309/include_str"
 license = "Apache-2.0"
-
-[dependencies]
-
-[features]
-default = []
-
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"] # Used in the root .rs file to enable `#![cfg_attr(docsrs, feature(doc_cfg))]`

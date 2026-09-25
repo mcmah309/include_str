@@ -2,28 +2,27 @@ use include_str::include_str;
 
 #[test]
 fn includes_files_at_compile_time() {
-    const TEXT: &str = include_str!("fixtures/message.txt" => collapse_whitespace(" "));
+    const TEXT: &str = include_str!("fixtures/message.txt" => replace_whitespace(" "));
     static ABSOLUTE: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/message.txt"
-    ) => collapse_whitespace(" "));
+    ) => replace_whitespace(" "));
     assert_eq!(TEXT, " Hello, world! ");
     assert_eq!(ABSOLUTE, TEXT);
     assert_eq!(
-        include_str!("fixtures/empty.txt" => collapse_whitespace(" ")),
+        include_str!("fixtures/empty.txt" => replace_whitespace(" ")),
         ""
     );
     assert_eq!(
-        include_str!("fixtures/whitespace.txt" => collapse_whitespace(" ")),
+        include_str!("fixtures/whitespace.txt" => replace_whitespace(" ")),
         " "
     );
 }
 
 macro_rules! check {
     ($input:expr, $expected:expr) => {{
-        const LEN: usize = include_str::__private::collapse_whitespace_len($input);
-        const BYTES: [u8; LEN] =
-            include_str::__private::collapse_whitespace_as_space::<LEN>($input);
+        const LEN: usize = include_str::__private::replace_whitespace_len($input, " ");
+        const BYTES: [u8; LEN] = include_str::__private::replace_whitespace::<LEN>($input, " ");
         assert_eq!(include_str::__private::as_str(&BYTES), $expected);
     }};
 }
