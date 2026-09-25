@@ -13,7 +13,7 @@ const RAW: &str = include_str::include_str!("message.txt");
 const CONFIG: &str = include_str::include_str!(
     "config.jsonc" => replace("{{name}}", "Rust") => jsonc
 );
-const WORDS: &[&str] = include_str::include_lines!("words.txt");
+const WORDS: &[&str] = include_str::include_lines!("words.txt" => trim_lines);
 ```
 
 Separate operations with `=>`. They run **left to right**, each receiving the
@@ -55,9 +55,11 @@ It is a lexical compactor, not a full SQL parser or dialect converter.
 
 Named macros such as `include_str_trim!`, `include_sql_str!`, and
 `include_str_jsonc!` provide shorthand for individual operations; their API docs
-describe detailed behavior. `include_lines!` separately returns a
-`&'static [&'static str]`, following `str::lines()`: LF/CRLF endings are removed,
-blank lines are kept, and a final line ending adds no extra entry.
+describe detailed behavior. `include_lines!` accepts the same pipeline, processing
+the whole text **before splitting** into a `&'static [&'static str]`. Operations
+do not run independently on each line; use `trim_lines` to trim each line.
+Splitting follows `str::lines()`: LF/CRLF endings are removed, blank lines are
+kept, and a final line ending adds no extra entry.
 
 Paths are relative to the invoking Rust source file. Path expressions such as
 `concat!(env!("CARGO_MANIFEST_DIR"), "/queries/users.sql")` also work.

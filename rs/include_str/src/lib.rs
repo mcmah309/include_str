@@ -73,14 +73,16 @@ mod pipeline;
 
 /// Include a UTF-8 file as a static slice of lines for lookup tables or word lists.
 ///
-/// Matches [`str::lines`]: LF and CRLF delimiters are removed, blank lines are
-/// preserved, and a final line ending does not add an extra empty entry. An
+/// Splits processed text like [`str::lines`]: LF and CRLF delimiters are removed,
+/// blank lines are preserved, and a final line ending adds no extra entry. An
 /// empty file produces an empty slice. Lone CRs, other Unicode whitespace,
-/// indentation, duplicates, and line order are preserved. No sorting or trimming
-/// is performed. Both the slice and its strings have static lifetimes.
+/// indentation, duplicates, and line order are preserved unless changed by an
+/// operation. Both the slice and its strings have static lifetimes.
 ///
-/// Accepts the same path expressions as [`include_str!`]. Splitting happens at
-/// compile time; the entries borrow from the included file without allocation.
+/// Accepts the same paths and `=>` operations as [`include_str!`]. Operations run
+/// on the whole text before splitting, not independently on each line. Use
+/// `trim_lines` to trim each line. Processing and splitting happen at compile
+/// time; entries borrow from the resulting static text without runtime allocation.
 ///
 /// ```
 /// const WORDS: &[&str] = include_str::include_lines!("../tests/fixtures/words.txt");
@@ -88,11 +90,16 @@ mod pipeline;
 /// assert!(WORDS.contains(&"banana"));
 /// // This fixture is already sorted, so binary search is also available.
 /// assert_eq!(WORDS.binary_search(&"cherry"), Ok(2));
+///
+/// const LINES: &[&str] = include_str::include_lines!(
+///     "../tests/fixtures/message.txt" => trim_lines => replace("world", "Rust")
+/// );
+/// assert_eq!(LINES, &["Hello, Rust!"]);
 /// ```
 #[macro_export]
 macro_rules! include_lines {
-    ($path:expr $(,)?) => {{
-        const INPUT: &str = $crate::include_str!($path);
+    ($($input:tt)*) => {{
+        const INPUT: &str = $crate::include_str!($($input)*);
         const LEN: usize = $crate::__private::lines_len(INPUT);
         const LINES: [&str; LEN] = $crate::__private::lines::<LEN>(INPUT);
         const RESULT: &[&str] = &LINES;

@@ -23,6 +23,57 @@ fn lookup_table_is_available_in_constants_statics_and_expressions() {
     assert_eq!(include_lines!("fixtures/empty.txt"), &[] as &[&str]);
 }
 
+#[test]
+fn pipelines_produce_static_lines_from_processed_text() {
+    const FROM: &str = "world";
+    const TO: &str = "Rust\n🦀";
+    const LINES: &[&str] = include_lines!(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/message.txt")
+            => trim_lines => replace(FROM, TO,),
+    );
+    static STATIC_LINES: &[&str] = include_lines!(
+        "fixtures/message.txt" => trim_lines => replace(FROM, TO)
+    );
+    fn lines() -> &'static [&'static str] {
+        include_lines!("fixtures/message.txt" => trim_lines => replace(FROM, TO))
+    }
+    assert_eq!(LINES, &["Hello, Rust", "🦀!"]);
+    assert_eq!(STATIC_LINES, LINES);
+    assert_eq!(lines(), LINES);
+    assert_eq!(
+        include_lines!("fixtures/lookup_mixed.txt" => trim_lines),
+        &["apple", "", "banana", "🦀\rapple", "apple"]
+    );
+    assert_eq!(
+        include_lines!("fixtures/whitespace.txt" => trim),
+        &[] as &[&str]
+    );
+    assert_eq!(
+        include_lines!("fixtures/empty.txt" => replace("", "a\nb\n")),
+        &["a", "b"]
+    );
+}
+
+#[test]
+fn pipelines_run_in_order_on_the_whole_text_before_splitting() {
+    assert_eq!(
+        include_lines!("fixtures/words.txt" => replace("apple\nbanana", "pear")),
+        &["pear", "cherry"]
+    );
+    assert_eq!(
+        include_lines!("fixtures/message.txt" => trim => replace("Hello", " Hello")),
+        &[" Hello, world!"]
+    );
+    assert_eq!(
+        include_lines!("fixtures/message.txt" => replace("Hello", " Hello") => trim),
+        &["Hello, world!"]
+    );
+    assert_eq!(
+        include_lines!("fixtures/config.jsonc" => jsonc => json),
+        &[r#"{"url":"https://example.test/a/*b*/","values":[1,true,null]}"#]
+    );
+}
+
 macro_rules! check {
     ($input:expr, $expected:expr) => {{
         const INPUT: &str = $input;

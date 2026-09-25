@@ -826,6 +826,18 @@ fn line_tables_work_in_renamed_no_std_consumers_and_track_the_source_file() {
         pub const TABLE: &[&str] = strings::include_lines!(concat!("words ", "🦀.txt"),);
         pub static STATIC_TABLE: &[&str] = strings::include_lines!("words 🦀.txt");
         pub fn table() -> &'static [&'static str] { strings::include_lines!("words 🦀.txt") }
+        pub const FROM: &str = "apple";
+        pub const PROCESSED: &[&str] = strings::include_lines!(
+            concat!("words ", "🦀.txt") => replace(FROM, " pear ") => trim_lines,
+        );
+        pub static PROCESSED_STATIC: &[&str] = strings::include_lines!(
+            "words 🦀.txt" => trim_lines => replace(FROM, "pear")
+        );
+        pub fn processed() -> &'static [&'static str] {
+            strings::include_lines!("words 🦀.txt" => replace(FROM, "pear"))
+        }
+        const _: () = assert!(PROCESSED.len() == 4 && PROCESSED[0].len() == 4);
+        const _: () = assert!(PROCESSED[1].is_empty() && PROCESSED_STATIC[3].len() == 4);
         const _: () = assert!(TABLE.len() == 4 && STATIC_TABLE.len() == 4);
         const _: () = assert!(TABLE[0].len() == 5 && TABLE[1].is_empty() && TABLE[2].len() == 6);
         const _: () = assert!(INPUT.len() == 6 && LEN == 99 && LINES.len() == 1 && RESULT.len() == 6);
@@ -839,4 +851,34 @@ fn line_tables_work_in_renamed_no_std_consumers_and_track_the_source_file() {
     let dependencies = fs::read_to_string(consumer.0.join("consumer.d")).unwrap();
     assert!(dependencies.contains("words"), "{dependencies}");
     assert!(dependencies.contains("🦀.txt"), "{dependencies}");
+}
+
+#[test]
+fn line_pipelines_reject_invalid_operations_and_input_at_compile_time() {
+    let consumer = Consumer::new();
+    consumer.write("input.txt", "not json");
+    for (arguments, diagnostic) in [
+        (r#""input.txt" => json"#, "include_str!: json:"),
+        (
+            r#""input.txt" => typo"#,
+            "unknown operation or invalid arguments",
+        ),
+        (
+            r#""input.txt" => replace("a")"#,
+            "unknown operation or invalid arguments",
+        ),
+        (r#""input.txt", trim"#, "operations separated by =>"),
+        (r#""input.txt" => trim =>"#, "operations separated by =>"),
+        (
+            r#""input.txt" => replace(runtime, "x")"#,
+            "non-constant value",
+        ),
+    ] {
+        let output = consumer.compile(&format!(
+            "pub fn lines(runtime: &str) -> &'static [&'static str] {{ strings::include_lines!({arguments}) }}"
+        ));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "accepted {arguments}");
+        assert!(stderr.contains(diagnostic), "{arguments}: {stderr}");
+    }
 }
