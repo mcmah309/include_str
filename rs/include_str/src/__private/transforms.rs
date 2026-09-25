@@ -75,7 +75,7 @@ pub(super) const fn scan_strip_prefix<const N: usize>(
     while j < pattern.len() {
         assert!(
             pattern[j] != b'\r' && pattern[j] != b'\n',
-            "include_str_strip_prefix!: prefix must not contain a line ending"
+            "include_str_strip_line_prefix!: prefix must not contain a line ending"
         );
         j += 1;
     }

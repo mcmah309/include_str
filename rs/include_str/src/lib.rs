@@ -177,13 +177,13 @@ macro_rules! include_str_replace {
 /// The prefix must be a constant string expression and cannot contain CR or LF.
 ///
 /// ```
-/// const TEXT: &str = include_str::include_str_strip_prefix!(
+/// const TEXT: &str = include_str::include_str_strip_line_prefix!(
 ///     "../tests/fixtures/message.txt", " \t",
 /// );
 /// assert_eq!(TEXT, "Hello, world!\r\n");
 /// ```
 #[macro_export]
-macro_rules! include_str_strip_prefix {
+macro_rules! include_str_strip_line_prefix {
     ($path:expr, $prefix:expr $(,)?) => {
         const {
             $crate::__private::as_str(

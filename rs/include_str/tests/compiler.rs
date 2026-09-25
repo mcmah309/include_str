@@ -117,12 +117,12 @@ fn public_macros_reject_missing_files_and_invalid_utf8() {
         "include_str_json",
         "include_str_jsonc",
         "include_str_replace",
-        "include_str_strip_prefix",
+        "include_str_strip_line_prefix",
     ] {
         for (file, diagnostic) in [("missing.txt", "couldn't read"), ("invalid.txt", "utf-8")] {
             let extra = match name {
                 "include_str_replace" => ", \"a\", \"b\"",
-                "include_str_strip_prefix" => ", \"a\"",
+                "include_str_strip_line_prefix" => ", \"a\"",
                 _ => "",
             };
             let output = consumer.compile(&format!(
@@ -158,7 +158,7 @@ fn renamed_no_std_consumer_uses_static_results_and_tracks_files() {
         pub const RAW: &str = strings::include_str!("text.txt");
         pub const LINES: &str = strings::include_str_trim_lines!(concat!("text", ".txt"),);
         pub const REPLACED: &str = strings::include_str_replace!("text.txt", "🦀", "Rust");
-        pub const STRIPPED: &str = strings::include_str_strip_prefix!("text.txt", "  ");
+        pub const STRIPPED: &str = strings::include_str_strip_line_prefix!("text.txt", "  ");
         pub const JSON: &str = strings::include_str_json!("config.json");
         pub const JSONC: &str = strings::include_str_jsonc!("config.json");
     "#,
@@ -254,7 +254,7 @@ fn json_and_invalid_prefixes_fail_at_compile_time() {
         String::from_utf8_lossy(&output.stderr)
     );
     let output = consumer.compile(
-        "pub const TEXT: &str = strings::include_str_strip_prefix!(\"input.json\", \"\\n\");",
+        "pub const TEXT: &str = strings::include_str_strip_line_prefix!(\"input.json\", \"\\n\");",
     );
     assert!(!output.status.success());
     assert!(
@@ -313,7 +313,7 @@ fn every_macro_works_in_all_contexts_with_renaming_and_shadowed_names() {
         ("include_str_json", "", "\"é 🦀\""),
         ("include_str_jsonc", "", "\"é 🦀\""),
         ("include_str_replace", ", FROM, TO", " \t\"Rust 🦀\" \r\n"),
-        ("include_str_strip_prefix", ", PREFIX", "\"é 🦀\" \r\n"),
+        ("include_str_strip_line_prefix", ", PREFIX", "\"é 🦀\" \r\n"),
     ];
     let mut source = String::from(
         r#"
@@ -366,7 +366,7 @@ fn every_macro_rejects_invalid_arguments_without_runtime_fallback() {
         "include_str_trim_lines",
         "include_sql_str",
         "include_str_replace",
-        "include_str_strip_prefix",
+        "include_str_strip_line_prefix",
         "include_str_json",
         "include_str_jsonc",
     ] {
@@ -380,9 +380,9 @@ fn every_macro_rejects_invalid_arguments_without_runtime_fallback() {
     for body in [
         "strings::include_str_replace!(\"input.txt\", runtime, \"x\")",
         "strings::include_str_replace!(\"input.txt\", \"x\", runtime)",
-        "strings::include_str_strip_prefix!(\"input.txt\", runtime)",
+        "strings::include_str_strip_line_prefix!(\"input.txt\", runtime)",
         "strings::include_str_replace!(\"input.txt\", 42, \"x\")",
-        "strings::include_str_strip_prefix!(\"input.txt\", b\"x\")",
+        "strings::include_str_strip_line_prefix!(\"input.txt\", b\"x\")",
     ] {
         let output = consumer.compile(&format!(
             "pub fn test(runtime: &str) -> &'static str {{ {body} }}"
@@ -490,7 +490,7 @@ fn all_text_macros_preserve_raw_control_bytes_and_only_change_requested_content(
             input.replace('é', ""),
         ),
         (
-            "include_str_strip_prefix",
+            "include_str_strip_line_prefix",
             ", \"\\0\"",
             input.strip_prefix('\0').unwrap().into(),
         ),
@@ -562,7 +562,7 @@ fn empty_and_whitespace_files_have_explicit_results_for_every_macro() {
         ("include_str_trim_lines", "", ""),
         ("include_sql_str", "", ""),
         ("include_str_replace", ", \"\", \"x\"", "x"),
-        ("include_str_strip_prefix", ", \"\"", ""),
+        ("include_str_strip_line_prefix", ", \"\"", ""),
     ];
     consumer.write("empty.txt", "");
     for (name, extra, expected) in text_cases {

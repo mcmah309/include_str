@@ -1,4 +1,4 @@
-use include_str::{include_str_json, include_str_replace, include_str_strip_prefix};
+use include_str::{include_str_json, include_str_replace, include_str_strip_line_prefix};
 
 #[test]
 fn jsonc_converts_files_in_const_and_static_contexts() {
@@ -79,9 +79,9 @@ fn multiple_replacements_run_in_order_at_compile_time() {
 #[test]
 fn prefix_removal_and_json_work_through_public_macros() {
     const PREFIX: &str = "  ";
-    const TEXT: &str = include_str_strip_prefix!("fixtures/unicode.txt", PREFIX,);
+    const TEXT: &str = include_str_strip_line_prefix!("fixtures/unicode.txt", PREFIX,);
     assert_eq!(TEXT, "\u{2003}\tcafé 🦀\n日本語\u{a0}");
-    assert_eq!(include_str_strip_prefix!("fixtures/empty.txt", ""), "");
+    assert_eq!(include_str_strip_line_prefix!("fixtures/empty.txt", ""), "");
     static JSON: &str = include_str_json!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/config.json"
