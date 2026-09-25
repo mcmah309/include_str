@@ -1,11 +1,11 @@
-use include_str::{include_sql_str, include_str_trim};
+use include_str::include_str;
 
 #[path = "fixtures/nested/mod.rs"]
 mod nested;
 
 const RAW: &str = include_str::include_str!("fixtures/message.txt");
-const TRIMMED: &str = include_str_trim!("fixtures/message.txt",);
-static SQL: &str = include_sql_str!("fixtures/query.sql",);
+const TRIMMED: &str = include_str!("fixtures/message.txt" => trim);
+static SQL: &str = include_str!("fixtures/query.sql" => sql);
 
 #[test]
 fn includes_files_at_compile_time() {
@@ -17,33 +17,36 @@ fn includes_files_at_compile_time() {
     );
     assert_eq!(nested::VALUE, "nested file");
     assert_eq!(
-        include_str_trim!(concat!(
+        include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/tests/fixtures/message.txt"
-        )),
+        ) => trim),
         TRIMMED
     );
     assert_eq!(
-        include_sql_str!(concat!(
+        include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/tests/fixtures/query.sql"
-        )),
+        ) => sql),
         SQL
     );
 }
 
 #[test]
 fn handles_empty_and_unicode_files() {
-    assert_eq!(include_str_trim!("fixtures/empty.txt"), "");
-    assert_eq!(include_sql_str!("fixtures/empty.txt"), "");
-    assert_eq!(include_str_trim!("fixtures/whitespace.txt"), "");
-    assert_eq!(include_sql_str!("fixtures/whitespace.txt"), "");
-    assert_eq!(include_sql_str!("fixtures/comments.sql"), "");
+    assert_eq!(include_str!("fixtures/empty.txt" => trim), "");
+    assert_eq!(include_str!("fixtures/empty.txt" => sql), "");
+    assert_eq!(include_str!("fixtures/whitespace.txt" => trim), "");
+    assert_eq!(include_str!("fixtures/whitespace.txt" => sql), "");
+    assert_eq!(include_str!("fixtures/comments.sql" => sql), "");
     assert_eq!(
-        include_str_trim!("fixtures/unicode.txt"),
+        include_str!("fixtures/unicode.txt" => trim),
         "café 🦀\n  日本語"
     );
-    assert_eq!(include_sql_str!("fixtures/unicode.txt"), "café 🦀 日本語");
+    assert_eq!(
+        include_str!("fixtures/unicode.txt" => sql),
+        "café 🦀 日本語"
+    );
 }
 
 // Exercise the same const scanner with small, readable SQL edge cases.
@@ -137,8 +140,8 @@ fn macros_are_hygienic() {
     const LEN: usize = 123;
     const BYTES: &[u8] = b"caller";
     const TEXT: &str = "caller";
-    assert_eq!(include_str_trim!("fixtures/message.txt"), TRIMMED);
-    assert_eq!(include_sql_str!("fixtures/query.sql"), SQL);
+    assert_eq!(include_str!("fixtures/message.txt" => trim), TRIMMED);
+    assert_eq!(include_str!("fixtures/query.sql" => sql), SQL);
     assert_eq!(
         (INPUT, LEN, BYTES, TEXT),
         ("caller", 123, b"caller".as_slice(), "caller")

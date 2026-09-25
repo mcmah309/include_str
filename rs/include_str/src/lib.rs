@@ -35,15 +35,15 @@
 /// - `replace(from, to)`: replace literal matches; arguments must be constant strings.
 /// - `strip_line_prefix(prefix)`: remove a literal prefix from each matching line.
 /// - `strip_line_suffix(suffix)`: remove a literal suffix from each matching line.
-/// - `sql`: strip SQL comments and compact unquoted whitespace, like [`include_sql_str!`].
-/// - `json`: validate and minify JSON, like [`include_str_json!`].
-/// - `jsonc`: convert JSONC to minified JSON, like [`include_str_jsonc!`].
+/// - `sql`: strip SQL comments and compact unquoted whitespace.
+/// - `json`: validate and minify JSON.
+/// - `jsonc`: convert JSONC to minified JSON.
 ///
 /// Operations may be reordered or repeated; each processes the previous text
 /// and must accept it or compilation fails. They do not convert between formats:
 /// `jsonc => sql` applies SQL processing to JSON text. Text operations also affect
 /// quoted content. Use `replace(...) => json` to validate after replacement;
-/// `json => replace(...)` can invalidate the JSON. See the named macros for details.
+/// `json => replace(...)` can invalidate the JSON. See the operation details below.
 /// Use [`include_lines!`] separately for a slice of lines instead of text.
 /// Whitespace runs include leading/trailing Unicode whitespace. Custom collapse
 /// replacements are inserted once per run without being processed again; `""`
@@ -58,6 +58,124 @@
 /// );
 /// assert_eq!(TEXT, "Hello, Rust!");
 /// ```
+///
+/// ## `trim`
+///
+/// Remove leading and trailing Unicode whitespace.
+///
+/// Internal whitespace is preserved. Whitespace has the same definition as
+/// [`str::trim`].
+///
+/// ## `trim_lines`
+///
+/// Trim Unicode whitespace from each line.
+///
+/// Preserves whitespace within lines, blank lines, and original LF or CRLF line
+/// endings, including a final line ending. A lone carriage return is whitespace,
+/// not a line separator. Other Unicode whitespace follows [`str::trim`].
+///
+/// ## `collapse_whitespace`
+///
+/// Collapse each whitespace run to one character.
+///
+/// Newline wins over tab, and tab wins over space, regardless of order. CR and
+/// LF (including CRLF) produce `\n`; otherwise a run containing `\t` produces
+/// `\t`, and all remaining Unicode whitespace produces an ASCII space.
+/// Whitespace has the same definition as [`str::trim`]. Leading and trailing
+/// runs are collapsed, not removed; non-whitespace text is preserved.
+///
+/// ## `collapse_whitespace(replacement)`
+///
+/// Replace each Unicode whitespace run with a constant string.
+///
+/// Includes tabs, line endings, and leading/trailing runs. Non-whitespace text
+/// is preserved; inserted text is not processed again. `""` removes whitespace,
+/// and `" "` (also written `space`) replaces each run with one ASCII space.
+///
+/// ## `sql`
+///
+/// Strip SQL comments and collapse unquoted whitespace to one space.
+///
+/// Removes `--` line comments and `/* ... */` block comments (including nested
+/// blocks). Comments separate tokens, just like whitespace; leading and trailing
+/// whitespace is removed. Unicode whitespace is recognized.
+///
+/// Single-quoted strings, double-quoted identifiers, backtick identifiers,
+/// bracket identifiers, and PostgreSQL `$$...$$` / `$tag$...$tag$` strings are
+/// preserved byte for byte. Doubled quote delimiters are supported, as are
+/// backslash escapes in PostgreSQL `E'...'` strings. Unterminated quotes or block
+/// comments produce a compile-time error.
+///
+/// This is a lexical compactor, not a SQL parser or a universal dialect adapter.
+/// It does not support MySQL `#` comments or implicit backslash escapes in plain
+/// strings. All block comments are removed, including optimizer hints and MySQL
+/// executable comments. SQL that depends on comments or significant unquoted
+/// newlines (such as PostgreSQL newline-separated adjacent literals) should use
+/// [`include_str!`] instead. Brackets are always treated as quoted identifiers,
+/// so use the raw macro for dialects that use brackets for array expressions.
+///
+/// Malformed SQL fails during constant evaluation.
+///
+/// ```compile_fail,E0080
+/// const SQL: &str = include_str::include_str!("../tests/fixtures/broken.sql" => sql);
+/// ```
+///
+/// ## `replace`
+///
+/// Replace every non-overlapping literal occurrence.
+///
+/// Matches are processed left to right, like `str::replace`. Replacement text
+/// is not searched again within the same pair. An empty search string inserts the replacement at
+/// every Unicode character boundary, including the start and end.
+/// Chain `replace(from, to)` operations to apply multiple pairs in order; later
+/// operations also match text inserted by earlier ones.
+/// Search and replacement arguments must be constant string expressions.
+///
+/// ## `strip_line_prefix`
+///
+/// Remove one literal prefix from each matching line.
+///
+/// Lines without the prefix are unchanged. Matching starts at the first byte of
+/// each line without trimming indentation. LF and CRLF endings are preserved;
+/// a lone CR does not start a new line. An empty prefix has no effect.
+/// The prefix must be a constant string expression and cannot contain CR or LF.
+///
+/// ## `strip_line_suffix`
+///
+/// Remove one literal suffix from each matching line.
+///
+/// Matches immediately before the LF/CRLF ending or the end of the file, without
+/// trimming whitespace. Line endings and nonmatching lines are preserved; a lone
+/// CR is content, not a line separator. An empty suffix has no effect.
+/// The suffix must be a constant string expression and cannot contain CR or LF.
+///
+/// ## `json`
+///
+/// Validate JSON syntax and remove formatting whitespace.
+///
+/// Preserves strings, escape spellings, numbers, key order, and duplicate keys
+/// byte for byte. Accepts any JSON root value. Only space, tab, CR, and LF outside
+/// strings are removed. Comments, trailing commas, BOMs, and malformed input
+/// produce compile-time errors. Nesting is limited to 128 arrays/objects.
+///
+/// Follows the [RFC 8259 grammar](https://www.rfc-editor.org/rfc/rfc8259):
+/// Unicode escapes are checked syntactically but not decoded, so unpaired
+/// surrogate escapes are preserved. Numbers are not restricted to float ranges.
+///
+/// ## `jsonc`
+///
+/// Convert JSONC to minified, valid JSON.
+///
+/// Accepts `//` line comments, non-nested `/* ... */` block comments, and a
+/// single trailing comma in nonempty arrays or objects. Comments are allowed
+/// wherever JSON whitespace is allowed, but cannot split a number or keyword.
+/// Line comments end at CR, LF, or the end of the file.
+///
+/// Strings (including comment markers inside them), escapes, numbers, key order,
+/// and duplicate keys are preserved. All other validation rules and the nesting
+/// limit of 128 containers match `json`. This is not JSON5:
+/// single quotes, unquoted keys, and hexadecimal numbers are rejected.
+///
 #[macro_export]
 macro_rules! include_str {
     ($path:expr $(,)?) => {
@@ -110,225 +228,6 @@ macro_rules! include_lines {
         const RESULT: &[&str] = &LINES;
         RESULT
     }};
-}
-
-/// Include a UTF-8 file and remove leading and trailing Unicode whitespace.
-///
-/// Internal whitespace is preserved. Whitespace has the same definition as
-/// [`str::trim`]. Accepts the same path expressions as [`include_str!`], including
-/// `concat!` and `env!`.
-#[macro_export]
-macro_rules! include_str_trim {
-    ($path:expr $(,)?) => {
-        $crate::include_str!($path => trim)
-    };
-}
-
-/// Include a UTF-8 file and trim Unicode whitespace from each line.
-///
-/// Preserves whitespace within lines, blank lines, and original LF or CRLF line
-/// endings, including a final line ending. A lone carriage return is whitespace,
-/// not a line separator. Other Unicode whitespace follows [`str::trim`].
-/// Accepts the same path expressions as [`include_str!`].
-///
-/// ```
-/// const TEXT: &str = include_str::include_str_trim_lines!("../tests/fixtures/message.txt");
-/// assert_eq!(TEXT, "Hello, world!\r\n");
-/// ```
-#[macro_export]
-macro_rules! include_str_trim_lines {
-    ($path:expr $(,)?) => {
-        $crate::include_str!($path => trim_lines)
-    };
-}
-
-/// Include a UTF-8 file and collapse each whitespace run to one character.
-///
-/// Newline wins over tab, and tab wins over space, regardless of order. CR and
-/// LF (including CRLF) produce `\n`; otherwise a run containing `\t` produces
-/// `\t`, and all remaining Unicode whitespace produces an ASCII space.
-/// Whitespace has the same definition as [`str::trim`]. Leading and trailing
-/// runs are collapsed, not removed; non-whitespace text is preserved.
-/// Accepts the same path expressions as [`include_str!`].
-///
-/// ```
-/// const TEXT: &str = include_str::include_str_collapse_whitespace!("../tests/fixtures/message.txt");
-/// assert_eq!(TEXT, "\tHello, world!\n");
-/// ```
-#[macro_export]
-macro_rules! include_str_collapse_whitespace {
-    ($path:expr $(,)?) => {
-        $crate::include_str!($path => collapse_whitespace)
-    };
-}
-
-/// Include a UTF-8 file and collapse each Unicode whitespace run to one ASCII space.
-///
-/// Includes tabs and line endings. Whitespace has the same definition as
-/// [`str::trim`]. Leading and trailing runs become one space each; non-whitespace
-/// text is preserved. Accepts the same path expressions as [`include_str!`].
-///
-/// ```
-/// const TEXT: &str = include_str::include_str_collapse_whitespace_as_space!("../tests/fixtures/message.txt");
-/// assert_eq!(TEXT, " Hello, world! ");
-/// ```
-#[macro_export]
-macro_rules! include_str_collapse_whitespace_as_space {
-    ($path:expr $(,)?) => {
-        $crate::include_str!($path => collapse_whitespace(space))
-    };
-}
-
-/// Include SQL, strip comments, and collapse unquoted whitespace to one space.
-///
-/// Removes `--` line comments and `/* ... */` block comments (including nested
-/// blocks). Comments separate tokens, just like whitespace; leading and trailing
-/// whitespace is removed. Unicode whitespace is recognized.
-///
-/// Single-quoted strings, double-quoted identifiers, backtick identifiers,
-/// bracket identifiers, and PostgreSQL `$$...$$` / `$tag$...$tag$` strings are
-/// preserved byte for byte. Doubled quote delimiters are supported, as are
-/// backslash escapes in PostgreSQL `E'...'` strings. Unterminated quotes or block
-/// comments produce a compile-time error.
-///
-/// This is a lexical compactor, not a SQL parser or a universal dialect adapter.
-/// It does not support MySQL `#` comments or implicit backslash escapes in plain
-/// strings. All block comments are removed, including optimizer hints and MySQL
-/// executable comments. SQL that depends on comments or significant unquoted
-/// newlines (such as PostgreSQL newline-separated adjacent literals) should use
-/// [`include_str!`] instead. Brackets are always treated as quoted identifiers,
-/// so use the raw macro for dialects that use brackets for array expressions.
-///
-/// ```
-/// const SQL: &str = include_str::include_sql_str!("../tests/fixtures/query.sql");
-/// assert_eq!(SQL, "SELECT id, 'not -- a /* comment */' AS label FROM users WHERE active = 1;");
-/// ```
-///
-/// Malformed SQL fails during constant evaluation:
-///
-/// ```compile_fail,E0080
-/// const SQL: &str = include_str::include_sql_str!("../tests/fixtures/broken.sql");
-/// ```
-#[macro_export]
-macro_rules! include_sql_str {
-    ($path:expr $(,)?) => {
-        $crate::include_str!($path => sql)
-    };
-}
-
-/// Include a UTF-8 file and replace every non-overlapping literal occurrence.
-///
-/// Matches are processed left to right, like `str::replace`. Replacement text
-/// is not searched again within the same pair. An empty search string inserts the replacement at
-/// every Unicode character boundary, including the start and end.
-/// Pass one or more search/replacement pairs after the path. Pairs are applied
-/// in order, so later pairs also match text inserted by earlier pairs.
-/// Search and replacement arguments must be constant string expressions.
-///
-/// ```
-/// const TEXT: &str = include_str::include_str_replace!(
-///     "../tests/fixtures/message.txt", "world", "Rust",
-/// );
-/// assert_eq!(TEXT, " \tHello, Rust!\r\n");
-///
-/// const CUSTOM: &str = include_str::include_str_replace!(
-///     "../tests/fixtures/message.txt",
-///     "world", "Rust",
-///     "Hello", "Hi",
-/// );
-/// assert_eq!(CUSTOM, " \tHi, Rust!\r\n");
-/// ```
-#[macro_export]
-macro_rules! include_str_replace {
-    ($path:expr, $($from:expr, $to:expr),+ $(,)?) => {
-        $crate::include_str!($path $(=> replace($from, $to))+)
-    };
-}
-
-/// Include a UTF-8 file and remove one literal prefix from each matching line.
-///
-/// Lines without the prefix are unchanged. Matching starts at the first byte of
-/// each line without trimming indentation. LF and CRLF endings are preserved;
-/// a lone CR does not start a new line. An empty prefix has no effect.
-/// The prefix must be a constant string expression and cannot contain CR or LF.
-///
-/// ```
-/// const TEXT: &str = include_str::include_str_strip_line_prefix!(
-///     "../tests/fixtures/message.txt", " \t",
-/// );
-/// assert_eq!(TEXT, "Hello, world!\r\n");
-/// ```
-#[macro_export]
-macro_rules! include_str_strip_line_prefix {
-    ($path:expr, $prefix:expr $(,)?) => {
-        $crate::include_str!($path => strip_line_prefix($prefix))
-    };
-}
-
-/// Include a UTF-8 file and remove one literal suffix from each matching line.
-///
-/// Matches immediately before the LF/CRLF ending or the end of the file, without
-/// trimming whitespace. Line endings and nonmatching lines are preserved; a lone
-/// CR is content, not a line separator. An empty suffix has no effect.
-/// The suffix must be a constant string expression and cannot contain CR or LF.
-/// Accepts the same path expressions as [`include_str!`].
-///
-/// ```
-/// const TEXT: &str = include_str::include_str_strip_line_suffix!(
-///     "../tests/fixtures/message.txt", "!",
-/// );
-/// assert_eq!(TEXT, " \tHello, world\r\n");
-/// ```
-#[macro_export]
-macro_rules! include_str_strip_line_suffix {
-    ($path:expr, $suffix:expr $(,)?) => {
-        $crate::include_str!($path => strip_line_suffix($suffix))
-    };
-}
-
-/// Include a UTF-8 JSON file, validate its syntax, and remove formatting whitespace.
-///
-/// Preserves strings, escape spellings, numbers, key order, and duplicate keys
-/// byte for byte. Accepts any JSON root value. Only space, tab, CR, and LF outside
-/// strings are removed. Comments, trailing commas, BOMs, and malformed input
-/// produce compile-time errors. Nesting is limited to 128 arrays/objects.
-///
-/// Follows the [RFC 8259 grammar](https://www.rfc-editor.org/rfc/rfc8259):
-/// Unicode escapes are checked syntactically but not decoded, so unpaired
-/// surrogate escapes are preserved. Numbers are not restricted to float ranges.
-///
-/// ```
-/// const JSON: &str = include_str::include_str_json!("../tests/fixtures/config.json");
-/// assert_eq!(JSON, r#"{"message":"two  spaces","enabled":true,"values":[1,null]}"#);
-/// ```
-#[macro_export]
-macro_rules! include_str_json {
-    ($path:expr $(,)?) => {
-        $crate::include_str!($path => json)
-    };
-}
-
-/// Include UTF-8 JSONC and convert it to minified, valid JSON at compile time.
-///
-/// Accepts `//` line comments, non-nested `/* ... */` block comments, and a
-/// single trailing comma in nonempty arrays or objects. Comments are allowed
-/// wherever JSON whitespace is allowed, but cannot split a number or keyword.
-/// Line comments end at CR, LF, or the end of the file.
-///
-/// Strings (including comment markers inside them), escapes, numbers, key order,
-/// and duplicate keys are preserved. All other validation rules and the nesting
-/// limit of 128 containers match [`include_str_json!`]. This is not JSON5:
-/// single quotes, unquoted keys, and hexadecimal numbers are rejected.
-///
-/// ```
-/// const JSON: &str = include_str::include_str_jsonc!("../tests/fixtures/config.jsonc");
-/// assert_eq!(JSON, r#"{"url":"https://example.test/a/*b*/","values":[1,true,null]}"#);
-/// ```
-#[macro_export]
-macro_rules! include_str_jsonc {
-    ($path:expr $(,)?) => {
-        $crate::include_str!($path => jsonc)
-    };
 }
 
 // Public only so exported macros can use these functions in downstream crates.

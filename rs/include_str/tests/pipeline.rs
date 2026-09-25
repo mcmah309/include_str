@@ -70,38 +70,10 @@ fn operations_compose_left_to_right() {
 }
 
 #[test]
-fn individual_operations_match_named_macros() {
-    macro_rules! same {
-        ($path:literal, $named:ident, $($op:tt)+) => {
-            assert_eq!(include_str!($path => $($op)+), include_str::$named!($path));
-        };
-    }
-    same!("fixtures/message.txt", include_str_trim, trim);
-    same!("fixtures/message.txt", include_str_trim_lines, trim_lines);
-    same!(
-        "fixtures/message.txt",
-        include_str_collapse_whitespace,
-        collapse_whitespace
-    );
-    same!(
-        "fixtures/message.txt",
-        include_str_collapse_whitespace_as_space,
-        collapse_whitespace(space)
-    );
-    same!("fixtures/query.sql", include_sql_str, sql);
-    same!("fixtures/config.json", include_str_json, json);
-    same!("fixtures/config.jsonc", include_str_jsonc, jsonc);
+fn raw_inclusion_matches_builtin() {
     assert_eq!(
         include_str!("fixtures/message.txt",),
         core::include_str!("fixtures/message.txt")
-    );
-    assert_eq!(
-        include_str!("fixtures/message.txt" => replace("world", "Rust")),
-        include_str::include_str_replace!("fixtures/message.txt", "world", "Rust")
-    );
-    assert_eq!(
-        include_str!("fixtures/message.txt" => strip_line_prefix(" \t")),
-        include_str::include_str_strip_line_prefix!("fixtures/message.txt", " \t")
     );
 }
 
@@ -129,6 +101,6 @@ fn supports_constant_arguments_paths_and_empty_results() {
     );
     assert_eq!(
         include_str!("fixtures/config.jsonc" => jsonc => json),
-        include_str::include_str_jsonc!("fixtures/config.jsonc")
+        include_str::include_str!("fixtures/config.jsonc" => jsonc)
     );
 }

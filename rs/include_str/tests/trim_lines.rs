@@ -1,18 +1,21 @@
-use include_str::include_str_trim_lines;
+use include_str::include_str;
 
 #[test]
 fn includes_and_trims_files_at_compile_time() {
-    const TEXT: &str = include_str_trim_lines!("fixtures/unicode.txt",);
-    static WINDOWS: &str = include_str_trim_lines!("fixtures/message.txt");
+    const TEXT: &str = include_str!("fixtures/unicode.txt" => trim_lines);
+    static WINDOWS: &str = include_str!("fixtures/message.txt" => trim_lines);
     assert_eq!(TEXT, "café 🦀\n日本語");
     assert_eq!(WINDOWS, "Hello, world!\r\n");
-    assert_eq!(include_str_trim_lines!("fixtures/empty.txt"), "");
-    assert_eq!(include_str_trim_lines!("fixtures/whitespace.txt"), "\r\n");
+    assert_eq!(include_str!("fixtures/empty.txt" => trim_lines), "");
     assert_eq!(
-        include_str_trim_lines!(concat!(
+        include_str!("fixtures/whitespace.txt" => trim_lines),
+        "\r\n"
+    );
+    assert_eq!(
+        include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/tests/fixtures/unicode.txt"
-        )),
+        ) => trim_lines),
         TEXT
     );
 }

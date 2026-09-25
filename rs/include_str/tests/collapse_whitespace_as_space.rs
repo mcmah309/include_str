@@ -1,20 +1,20 @@
-use include_str::include_str_collapse_whitespace_as_space;
+use include_str::include_str;
 
 #[test]
 fn includes_files_at_compile_time() {
-    const TEXT: &str = include_str_collapse_whitespace_as_space!("fixtures/message.txt",);
-    static ABSOLUTE: &str = include_str_collapse_whitespace_as_space!(concat!(
+    const TEXT: &str = include_str!("fixtures/message.txt" => collapse_whitespace(" "));
+    static ABSOLUTE: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/message.txt"
-    ));
+    ) => collapse_whitespace(" "));
     assert_eq!(TEXT, " Hello, world! ");
     assert_eq!(ABSOLUTE, TEXT);
     assert_eq!(
-        include_str_collapse_whitespace_as_space!("fixtures/empty.txt"),
+        include_str!("fixtures/empty.txt" => collapse_whitespace(" ")),
         ""
     );
     assert_eq!(
-        include_str_collapse_whitespace_as_space!("fixtures/whitespace.txt"),
+        include_str!("fixtures/whitespace.txt" => collapse_whitespace(" ")),
         " "
     );
 }

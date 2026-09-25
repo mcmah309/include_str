@@ -1,15 +1,18 @@
-use include_str::include_str_collapse_whitespace;
+use include_str::include_str;
 
 #[test]
 fn includes_files_at_compile_time() {
-    const TEXT: &str = include_str_collapse_whitespace!("fixtures/message.txt",);
-    static ABSOLUTE: &str = include_str_collapse_whitespace!(concat!(
+    const TEXT: &str = include_str!("fixtures/message.txt" => collapse_whitespace);
+    static ABSOLUTE: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/message.txt"
-    ));
+    ) => collapse_whitespace);
     assert_eq!(TEXT, "\tHello, world!\n");
     assert_eq!(ABSOLUTE, TEXT);
-    assert_eq!(include_str_collapse_whitespace!("fixtures/empty.txt"), "");
+    assert_eq!(
+        include_str!("fixtures/empty.txt" => collapse_whitespace),
+        ""
+    );
 }
 
 macro_rules! check {

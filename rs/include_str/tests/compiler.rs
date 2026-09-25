@@ -92,8 +92,9 @@ fn public_macros_reject_malformed_sql_at_compile_time() {
     ] {
         consumer.write("input.sql", sql);
         // Even invocation in an ordinary function must be evaluated at compile time.
-        let output = consumer
-            .compile("pub fn query() -> &'static str { strings::include_sql_str!(\"input.sql\") }");
+        let output = consumer.compile(
+            "pub fn query() -> &'static str { strings::include_str!(\"input.sql\" => sql) }",
+        );
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success(), "malformed SQL compiled: {sql:?}");
         assert!(
@@ -108,26 +109,10 @@ fn public_macros_reject_malformed_sql_at_compile_time() {
 fn public_macros_reject_missing_files_and_invalid_utf8() {
     let consumer = Consumer::new();
     consumer.write("invalid.txt", [0xff, 0xfe, b'a']);
-    for name in [
-        "include_str",
-        "include_lines",
-        "include_str_trim",
-        "include_str_trim_lines",
-        "include_sql_str",
-        "include_str_json",
-        "include_str_jsonc",
-        "include_str_replace",
-        "include_str_strip_line_prefix",
-        "include_str_strip_line_suffix",
-    ] {
+    for name in ["include_str", "include_lines"] {
         for (file, diagnostic) in [("missing.txt", "couldn't read"), ("invalid.txt", "utf-8")] {
-            let extra = match name {
-                "include_str_replace" => ", \"a\", \"b\"",
-                "include_str_strip_line_prefix" | "include_str_strip_line_suffix" => ", \"a\"",
-                _ => "",
-            };
             let output = consumer.compile(&format!(
-                "pub const VALUE: &{} = strings::{name}!(\"{file}\"{extra});",
+                "pub const VALUE: &{} = strings::{name}!(\"{file}\");",
                 if name == "include_lines" {
                     "[&str]"
                 } else {
@@ -154,14 +139,14 @@ fn renamed_no_std_consumer_uses_static_results_and_tracks_files() {
     consumer.write(
         "nested/mod.rs",
         r#"
-        pub const QUERY: &str = strings::include_sql_str!("query.sql",);
-        pub static TEXT: &str = strings::include_str_trim!(concat!("text", ".txt"),);
+        pub const QUERY: &str = strings::include_str!("query.sql" => sql);
+        pub static TEXT: &str = strings::include_str!(concat!("text", ".txt") => trim);
         pub const RAW: &str = strings::include_str!("text.txt");
-        pub const LINES: &str = strings::include_str_trim_lines!(concat!("text", ".txt"),);
-        pub const REPLACED: &str = strings::include_str_replace!("text.txt", "🦀", "Rust");
-        pub const STRIPPED: &str = strings::include_str_strip_line_prefix!("text.txt", "  ");
-        pub const JSON: &str = strings::include_str_json!("config.json");
-        pub const JSONC: &str = strings::include_str_jsonc!("config.json");
+        pub const LINES: &str = strings::include_str!(concat!("text", ".txt") => trim_lines);
+        pub const REPLACED: &str = strings::include_str!("text.txt" => replace("🦀", "Rust"));
+        pub const STRIPPED: &str = strings::include_str!("text.txt" => strip_line_prefix("  "));
+        pub const JSON: &str = strings::include_str!("config.json" => json);
+        pub const JSONC: &str = strings::include_str!("config.json" => jsonc);
     "#,
     );
     let output = consumer.compile(
@@ -225,7 +210,7 @@ fn json_and_invalid_prefixes_fail_at_compile_time() {
     ] {
         consumer.write("input.json", input);
         let output = consumer.compile(
-            "pub fn json() -> &'static str { strings::include_str_json!(\"input.json\") }",
+            "pub fn json() -> &'static str { strings::include_str!(\"input.json\" => json) }",
         );
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success(), "accepted {input:?}");
@@ -239,7 +224,7 @@ fn json_and_invalid_prefixes_fail_at_compile_time() {
         format!("{}0{}", "[".repeat(129), "]".repeat(129)),
     );
     let output =
-        consumer.compile("pub const JSON: &str = strings::include_str_json!(\"input.json\");");
+        consumer.compile("pub const JSON: &str = strings::include_str!(\"input.json\" => json);");
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("nesting exceeds 128"));
     // The documented maximum must also succeed in actual constant evaluation.
@@ -248,14 +233,14 @@ fn json_and_invalid_prefixes_fail_at_compile_time() {
         format!("{}0{}", "[".repeat(128), "]".repeat(128)),
     );
     let output =
-        consumer.compile("pub const JSON: &str = strings::include_str_json!(\"input.json\");");
+        consumer.compile("pub const JSON: &str = strings::include_str!(\"input.json\" => json);");
     assert!(
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
     let output = consumer.compile(
-        "pub const TEXT: &str = strings::include_str_strip_line_prefix!(\"input.json\", \"\\n\");",
+        "pub const TEXT: &str = strings::include_str!(\"input.json\" => strip_line_prefix(\"\\n\"));",
     );
     assert!(!output.status.success());
     assert!(
@@ -282,7 +267,7 @@ fn jsonc_validates_at_compile_time_and_accepts_only_documented_extensions() {
     ] {
         consumer.write("input.jsonc", input);
         let output = consumer.compile(
-            "pub fn value() -> &'static str { strings::include_str_jsonc!(\"input.jsonc\") }",
+            "pub fn value() -> &'static str { strings::include_str!(\"input.jsonc\" => jsonc) }",
         );
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success(), "accepted {input:?}");
@@ -292,7 +277,7 @@ fn jsonc_validates_at_compile_time_and_accepts_only_documented_extensions() {
         );
     }
     consumer.write("input.jsonc", "//start\n{\"a\":[true,/*last*/],}//end");
-    let output = consumer.compile("#![no_std]\npub const JSON: &str = strings::include_str_jsonc!(\"input.jsonc\");\nconst _: () = assert!(JSON.len() == 12);");
+    let output = consumer.compile("#![no_std]\npub const JSON: &str = strings::include_str!(\"input.jsonc\" => jsonc);\nconst _: () = assert!(JSON.len() == 12);");
     assert!(
         output.status.success(),
         "{}",
@@ -318,17 +303,20 @@ fn every_macro_works_in_all_contexts_with_renaming_and_shadowed_names() {
             " => strip_line_prefix(PREFIX) => collapse_whitespace(space) => trim",
             "\"é 🦀\"",
         ),
-        ("include_str_trim", "", "\"é 🦀\""),
-        ("include_str_trim_lines", "", "\"é 🦀\"\r\n"),
-        ("include_sql_str", "", "\"é 🦀\""),
-        ("include_str_json", "", "\"é 🦀\""),
-        ("include_str_jsonc", "", "\"é 🦀\""),
-        ("include_str_replace", ", FROM, TO", " \t\"Rust 🦀\" \r\n"),
-        ("include_str_strip_line_prefix", ", PREFIX", "\"é 🦀\" \r\n"),
+        ("include_str", " => trim", "\"é 🦀\""),
+        ("include_str", " => trim_lines", "\"é 🦀\"\r\n"),
+        ("include_str", " => sql", "\"é 🦀\""),
+        ("include_str", " => json", "\"é 🦀\""),
+        ("include_str", " => jsonc", "\"é 🦀\""),
         (
-            "include_str_strip_line_suffix",
-            ", \" \"",
-            " \t\"é 🦀\"\r\n",
+            "include_str",
+            " => replace(FROM, TO)",
+            " \t\"Rust 🦀\" \r\n",
+        ),
+        (
+            "include_str",
+            " => strip_line_prefix(PREFIX)",
+            "\"é 🦀\" \r\n",
         ),
         (
             "include_str",
@@ -380,39 +368,32 @@ fn every_macro_works_in_all_contexts_with_renaming_and_shadowed_names() {
 fn every_macro_rejects_invalid_arguments_without_runtime_fallback() {
     let consumer = Consumer::new();
     consumer.write("input.txt", "null");
-    for name in [
-        "include_str",
-        "include_lines",
-        "include_str_trim",
-        "include_str_trim_lines",
-        "include_sql_str",
-        "include_str_replace",
-        "include_str_strip_line_prefix",
-        "include_str_json",
-        "include_str_jsonc",
-    ] {
+    for name in ["include_str", "include_lines"] {
+        let result_type = if name == "include_lines" {
+            "&[&str]"
+        } else {
+            "&str"
+        };
         for arguments in ["", "\"input.txt\", \"x\", \"y\", \"extra\""] {
             let output = consumer.compile(&format!(
-                "pub const X: &str = strings::{name}!({arguments});"
+                "pub const X: {result_type} = strings::{name}!({arguments});"
             ));
             assert!(!output.status.success(), "{name} accepted ({arguments})");
         }
     }
     for body in [
-        "strings::include_str_strip_line_suffix!(\"input.txt\", runtime)",
         "strings::include_str!(\"input.txt\" => strip_line_suffix(runtime))",
         "strings::include_str!(\"input.txt\" => strip_line_suffix(42))",
         "strings::include_str!(\"input.txt\" => collapse_whitespace(runtime))",
         "strings::include_str!(\"input.txt\" => collapse_whitespace(42))",
         "strings::include_str!(\"input.txt\" => collapse_whitespace(b\"x\"))",
-        "strings::include_str_replace!(\"input.txt\", runtime, \"x\")",
-        "strings::include_str_replace!(\"input.txt\", \"x\", runtime)",
-        "strings::include_str_strip_line_prefix!(\"input.txt\", runtime)",
-        "strings::include_str_replace!(\"input.txt\", 42, \"x\")",
-        "strings::include_str_strip_line_prefix!(\"input.txt\", b\"x\")",
+        "strings::include_str!(\"input.txt\" => replace(runtime, \"x\"))",
+        "strings::include_str!(\"input.txt\" => replace(\"x\", runtime))",
+        "strings::include_str!(\"input.txt\" => strip_line_prefix(runtime))",
+        "strings::include_str!(\"input.txt\" => replace(42, \"x\"))",
+        "strings::include_str!(\"input.txt\" => strip_line_prefix(b\"x\"))",
         "strings::include_str!(\"input.txt\" => trim => replace(runtime, \"x\"))",
         "strings::include_str!(\"input.txt\" => replace(\"x\", runtime) => trim)",
-        "strings::include_str!(\"input.txt\" => strip_line_prefix(runtime))",
     ] {
         let output = consumer.compile(&format!(
             "pub fn test(runtime: &str) -> &'static str {{ {body} }}"
@@ -658,9 +639,9 @@ fn invalid_utf8_corpus_files_are_rejected_by_the_public_json_macros() {
             continue;
         }
         consumer.write("input.json", bytes);
-        for name in ["include_str_json", "include_str_jsonc"] {
+        for name in ["json", "jsonc"] {
             let output = consumer.compile(&format!(
-                "pub const X: &str = strings::{name}!(\"input.json\");"
+                "pub const X: &str = strings::include_str!(\"input.json\" => {name});"
             ));
             let stderr = String::from_utf8_lossy(&output.stderr);
             assert!(!output.status.success(), "{}: {name}", path.display());
@@ -693,8 +674,8 @@ fn accepted_upstream_corpus_files_expand_at_compile_time() {
             continue;
         }
         source.push_str(&format!(
-            "pub const JSON{tested}: &str = strings::include_str_json!({path:?});\n\
-             pub static JSONC{tested}: &str = strings::include_str_jsonc!({path:?});\n"
+            "pub const JSON{tested}: &str = strings::include_str!({path:?} => json);\n\
+             pub static JSONC{tested}: &str = strings::include_str!({path:?} => jsonc);\n"
         ));
         tested += 1;
     }
@@ -731,21 +712,21 @@ fn all_text_macros_preserve_raw_control_bytes_and_only_change_requested_content(
         .collect();
     let cases = [
         ("include_str", "", input.clone()),
-        ("include_str_trim", "", input.trim().into()),
-        ("include_str_trim_lines", "", lines),
+        ("include_str", " => trim", input.trim().into()),
+        ("include_str", " => trim_lines", lines),
         (
-            "include_str_replace",
-            ", \"\", \"🦀\"",
+            "include_str",
+            " => replace(\"\", \"🦀\")",
             input.replace("", "🦀"),
         ),
         (
-            "include_str_replace",
-            ", \"é\", \"\"",
+            "include_str",
+            " => replace(\"é\", \"\")",
             input.replace('é', ""),
         ),
         (
-            "include_str_strip_line_prefix",
-            ", \"\\0\"",
+            "include_str",
+            " => strip_line_prefix(\"\\0\")",
             input.strip_prefix('\0').unwrap().into(),
         ),
     ];
@@ -787,8 +768,8 @@ fn large_documents_use_exact_sized_output_arrays_at_compile_time() {
     let output = consumer.compile(
         r#"
         #![no_std]
-        pub const JSON: &str = strings::include_str_json!("large.json");
-        pub const JSONC: &str = strings::include_str_jsonc!("large.jsonc");
+        pub const JSON: &str = strings::include_str!("large.json" => json);
+        pub const JSONC: &str = strings::include_str!("large.jsonc" => jsonc);
         const fn equal(a: &str, b: &str) -> bool {
             let (a,b) = (a.as_bytes(), b.as_bytes());
             if a.len() != b.len() { return false; }
@@ -812,11 +793,11 @@ fn empty_and_whitespace_files_have_explicit_results_for_every_macro() {
     let consumer = Consumer::new();
     let text_cases = [
         ("include_str", "", ""),
-        ("include_str_trim", "", ""),
-        ("include_str_trim_lines", "", ""),
-        ("include_sql_str", "", ""),
-        ("include_str_replace", ", \"\", \"x\"", "x"),
-        ("include_str_strip_line_prefix", ", \"\"", ""),
+        ("include_str", " => trim", ""),
+        ("include_str", " => trim_lines", ""),
+        ("include_str", " => sql", ""),
+        ("include_str", " => replace(\"\", \"x\")", "x"),
+        ("include_str", " => strip_line_prefix(\"\")", ""),
     ];
     consumer.write("empty.txt", "");
     for (name, extra, expected) in text_cases {
@@ -832,9 +813,9 @@ fn empty_and_whitespace_files_have_explicit_results_for_every_macro() {
     }
     for content in ["", " \r\n\t", "\u{3000}\u{a0}"] {
         consumer.write("empty.txt", content);
-        for name in ["include_str_json", "include_str_jsonc"] {
+        for name in ["json", "jsonc"] {
             let output = consumer.compile(&format!(
-                "pub const X: &str = strings::{name}!(\"empty.txt\");"
+                "pub const X: &str = strings::include_str!(\"empty.txt\" => {name});"
             ));
             assert!(!output.status.success(), "{name} accepted {content:?}");
             assert!(String::from_utf8_lossy(&output.stderr).contains("E0080"));
